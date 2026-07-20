@@ -88,10 +88,10 @@ jobs:
           $cerPath = "artifacts\release\VeloPic-v${{ steps.version.outputs.version }}-CodeSigning.cer"
           Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $securePassword | Out-Null
           Export-Certificate -Cert $cert -FilePath $cerPath | Out-Null
-          Import-Certificate -FilePath $cerPath -CertStoreLocation "Cert:\CurrentUser\Root" | Out-Null
 
           "::add-mask::$password"
           "SIGN_CERT_PATH=$pfxPath" >> $env:GITHUB_ENV
+          "SIGN_CERT_PUBLIC_PATH=$cerPath" >> $env:GITHUB_ENV
           "SIGN_CERT_PASSWORD=$password" >> $env:GITHUB_ENV
           "SIGN_CERT_THUMBPRINT=$($cert.Thumbprint)" >> $env:GITHUB_ENV
 
@@ -108,16 +108,21 @@ jobs:
       - name: 验证 MSIX 签名
         shell: pwsh
         run: |
-          $signTool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
-            Where-Object { $_.FullName -like "*\x64\signtool.exe" } |
-            Sort-Object FullName -Descending |
-            Select-Object -First 1
-          if ($null -eq $signTool) {
-            throw "未找到 signtool.exe，无法验证 MSIX 签名。"
+          $msixPath = "artifacts\release\VeloPic-v${{ steps.version.outputs.version }}-win-x64.msix"
+          $signature = Get-AuthenticodeSignature -FilePath $msixPath
+          $expectedCertificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($env:SIGN_CERT_PUBLIC_PATH)
+
+          if ($null -eq $signature.SignerCertificate) {
+            throw "MSIX 不包含 Authenticode 签名。"
           }
-          & $signTool.FullName verify /pa /v "artifacts\release\VeloPic-v${{ steps.version.outputs.version }}-win-x64.msix"
-          if ($LASTEXITCODE -ne 0) {
-            throw "MSIX 签名验证失败，退出码：$LASTEXITCODE"
+          if ($signature.SignerCertificate.Thumbprint -ne $expectedCertificate.Thumbprint) {
+            throw "MSIX 签名者与公开证书不一致。"
+          }
+          if ($signature.SignatureType -ne "Authenticode") {
+            throw "MSIX 签名类型无效：$($signature.SignatureType)"
+          }
+          if ($signature.Status -notin @("Valid", "UnknownError")) {
+            throw "MSIX 签名完整性验证失败：$($signature.Status) $($signature.StatusMessage)"
           }
 
       - name: 清理签名私钥
@@ -126,7 +131,6 @@ jobs:
         run: |
           if (-not [string]::IsNullOrWhiteSpace($env:SIGN_CERT_THUMBPRINT)) {
             Remove-Item "Cert:\CurrentUser\My\$env:SIGN_CERT_THUMBPRINT" -Force -ErrorAction SilentlyContinue
-            Remove-Item "Cert:\CurrentUser\Root\$env:SIGN_CERT_THUMBPRINT" -Force -ErrorAction SilentlyContinue
           }
           if (-not [string]::IsNullOrWhiteSpace($env:SIGN_CERT_PATH)) {
             Remove-Item $env:SIGN_CERT_PATH -Force -ErrorAction SilentlyContinue
