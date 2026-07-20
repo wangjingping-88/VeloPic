@@ -4,7 +4,7 @@ VeloPic 是一款面向 Windows 10/11 的本地图片浏览与整理工具。应
 
 [在浏览器中打开 VeloPic 动态产品介绍页](https://wangjingping-88.github.io/VeloPic/)
 
-![VeloPic 主界面](doc/VeloPic_UI_topbar_alignment_window_capture.png)
+![VeloPic 主界面](doc/VeloPic_UI_main_window.png)
 
 ## 主要功能
 
