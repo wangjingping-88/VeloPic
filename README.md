@@ -111,7 +111,19 @@ $env:NUGET_PACKAGES = 'D:\Program Files\NuGet\packages'
 
 ## 发布
 
-生成自包含的 x64 发布目录：
+最新版本可从 [GitHub Releases](https://github.com/wangjingping-88/VeloPic/releases/latest) 下载：
+
+| 文件 | 用途 |
+| --- | --- |
+| `VeloPic-v*-win-x64.msix` | Windows x64 安装包 |
+| `VeloPic-v*-CodeSigning.cer` | MSIX 安装包的公开签名证书，不包含私钥 |
+| `VeloPic-v*-win-x64-portable.zip` | 无需安装的自包含便携版 |
+| `SHA256SUMS.txt` | 发布文件的 SHA-256 校验值 |
+| `Source code (zip/tar.gz)` | GitHub 自动生成的对应版本源码包 |
+
+安装 MSIX 前，先双击 `.cer`，选择“安装证书”，将证书放入“本地计算机”的“受信任人”证书存储；随后双击 `.msix` 安装。没有管理员权限或不希望安装证书时，可下载便携版，解压后运行 `VeloPic.App.exe`。
+
+从源码生成自包含的 x64 发布目录：
 
 ```powershell
 $env:NUGET_PACKAGES = 'D:\Program Files\NuGet\packages'
@@ -121,6 +133,8 @@ $env:NUGET_PACKAGES = 'D:\Program Files\NuGet\packages'
 ```
 
 发布前建议依次执行测试、`-BuildOnly` 构建检查，再在浅色、深色主题下完成一次手工冒烟验证。
+
+推送 `v*` 标签会触发 [Release 工作流](.github/workflows/release.yml)，自动测试、打包、签名并发布上述文件。
 
 ## 本地数据
 
