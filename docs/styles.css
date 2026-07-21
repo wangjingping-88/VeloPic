@@ -368,7 +368,7 @@ button {
   width: 68.63%;
   height: 76.84%;
   border: 2px solid #5dc9ff;
-  box-shadow: 0 0 0 999px rgba(6, 13, 22, 0.22);
+  box-shadow: 0 0 0 9999px rgba(6, 13, 22, 0.22);
   pointer-events: none;
   transition: left 280ms ease, top 280ms ease, width 280ms ease, height 280ms ease;
 }
