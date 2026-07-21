@@ -362,46 +362,54 @@ button {
 
 .focus-marker {
   position: absolute;
-  /* 图库网格：原图实测 (335, 201) - (2095, 1330)，基准 2569 x 1399。 */
-  left: 13.04%;
-  top: 14.37%;
-  width: 68.51%;
-  height: 80.70%;
+  /* 图库网格：原图实测 (333, 256) - (2096, 1331)，基准 2569 x 1399。 */
+  left: 12.96%;
+  top: 18.30%;
+  width: 68.63%;
+  height: 76.84%;
   border: 2px solid #5dc9ff;
   box-shadow: 0 0 0 999px rgba(6, 13, 22, 0.22);
   pointer-events: none;
   transition: left 280ms ease, top 280ms ease, width 280ms ease, height 280ms ease;
 }
 
+.product-stage[data-feature="media"] .focus-marker {
+  /* 图片/视频与浏览模式：原图实测 (333, 209) - (810, 235)。 */
+  left: 12.96%;
+  top: 14.94%;
+  width: 18.57%;
+  height: 1.86%;
+}
+
 .product-stage[data-feature="filter"] .focus-marker {
-  /* 筛选按钮：原图实测 (338, 48) - (480, 96)。 */
+  /* 筛选按钮：原图实测 (338, 50) - (479, 95)。 */
   left: 13.16%;
-  top: 3.43%;
-  width: 5.53%;
-  height: 3.43%;
+  top: 3.57%;
+  width: 5.49%;
+  height: 3.22%;
 }
 
 .product-stage[data-feature="classify"] .focus-marker {
-  /* 分类工具及分类列表：原图实测 (31, 556) - (308, 932)。 */
-  left: 1.21%;
-  top: 39.74%;
-  width: 10.78%;
-  height: 26.88%;
+  /* 分类工具及分类列表：原图实测 (38, 560) - (309, 1148)。 */
+  left: 1.48%;
+  top: 40.03%;
+  width: 10.55%;
+  height: 42.03%;
 }
 
 .product-stage[data-feature="wallpaper"] .focus-marker {
-  /* 壁纸模式、收藏、显示器和应用操作：原图实测 (2124, 759) - (2539, 1011)。 */
-  left: 82.68%;
-  top: 54.25%;
-  width: 16.15%;
-  height: 18.01%;
+  /* 壁纸模式、收藏、显示器和应用操作：原图实测 (2122, 613) - (2542, 1012)。 */
+  left: 82.60%;
+  top: 43.82%;
+  width: 16.35%;
+  height: 28.52%;
 }
 
 .scan-line {
   position: absolute;
   z-index: 3;
-  top: 14.37%;
-  bottom: 4.93%;
+  top: 18.30%;
+  bottom: 4.86%;
   width: 2px;
   background: #72d9ff;
   box-shadow: 0 0 16px #25a8e8;

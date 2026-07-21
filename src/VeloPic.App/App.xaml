@@ -19,7 +19,11 @@
                     <SolidColorBrush x:Key="TextSecondaryBrush" Color="#A8B3C3"/>
                     <SolidColorBrush x:Key="TextTertiaryBrush" Color="#748095"/>
                     <SolidColorBrush x:Key="BorderSubtleBrush" Color="#273447"/>
-                    <SolidColorBrush x:Key="BorderStrongBrush" Color="#3A4A61"/>
+                    <SolidColorBrush x:Key="BorderStrongBrush" Color="#4A5B73"/>
+                    <SolidColorBrush x:Key="InteractiveBorderBrush" Color="#53657E"/>
+                    <SolidColorBrush x:Key="InteractiveBorderPointerOverBrush" Color="#6A7D98"/>
+                    <SolidColorBrush x:Key="InteractiveBorderPressedBrush" Color="#7F93AE"/>
+                    <SolidColorBrush x:Key="ActionButtonBorderBrush" Color="#647892"/>
                     <SolidColorBrush x:Key="AccentPrimaryBrush" Color="#368BFF"/>
                     <SolidColorBrush x:Key="AccentHoverBrush" Color="#3C8DFF"/>
                     <SolidColorBrush x:Key="AccentSoftBrush" Color="#193F7D"/>
@@ -29,7 +33,13 @@
                     <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#303C4F"/>
                     <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#1F2937"/>
                     <SolidColorBrush x:Key="ButtonForeground" Color="#EEF3FA"/>
-                    <SolidColorBrush x:Key="ButtonBorderBrush" Color="#354255"/>
+                    <SolidColorBrush x:Key="ButtonBorderBrush" Color="#53657E"/>
+                    <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#6A7D98"/>
+                    <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#7F93AE"/>
+                    <SolidColorBrush x:Key="ToggleButtonBorderBrush" Color="#53657E"/>
+                    <SolidColorBrush x:Key="ToggleButtonBorderBrushPointerOver" Color="#6A7D98"/>
+                    <SolidColorBrush x:Key="ToggleButtonBorderBrushPressed" Color="#7F93AE"/>
+                    <SolidColorBrush x:Key="ToggleButtonBorderBrushChecked" Color="#368BFF"/>
                     <SolidColorBrush x:Key="TextControlBackground" Color="#1B2431"/>
                     <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#202B3A"/>
                     <SolidColorBrush x:Key="TextControlForeground" Color="#EEF3FA"/>
@@ -51,7 +61,11 @@
                     <SolidColorBrush x:Key="TextSecondaryBrush" Color="#536176"/>
                     <SolidColorBrush x:Key="TextTertiaryBrush" Color="#7A8798"/>
                     <SolidColorBrush x:Key="BorderSubtleBrush" Color="#D4DEEA"/>
-                    <SolidColorBrush x:Key="BorderStrongBrush" Color="#B8C6D8"/>
+                    <SolidColorBrush x:Key="BorderStrongBrush" Color="#A7B7CA"/>
+                    <SolidColorBrush x:Key="InteractiveBorderBrush" Color="#9CADC1"/>
+                    <SolidColorBrush x:Key="InteractiveBorderPointerOverBrush" Color="#7F95AD"/>
+                    <SolidColorBrush x:Key="InteractiveBorderPressedBrush" Color="#6B839D"/>
+                    <SolidColorBrush x:Key="ActionButtonBorderBrush" Color="#8195AC"/>
                     <SolidColorBrush x:Key="AccentPrimaryBrush" Color="#246FE5"/>
                     <SolidColorBrush x:Key="AccentHoverBrush" Color="#155FCC"/>
                     <SolidColorBrush x:Key="AccentSoftBrush" Color="#DCEAFF"/>
@@ -61,7 +75,13 @@
                     <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#DDE6F0"/>
                     <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#CED9E6"/>
                     <SolidColorBrush x:Key="ButtonForeground" Color="#182233"/>
-                    <SolidColorBrush x:Key="ButtonBorderBrush" Color="#C6D2E0"/>
+                    <SolidColorBrush x:Key="ButtonBorderBrush" Color="#9CADC1"/>
+                    <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#7F95AD"/>
+                    <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#6B839D"/>
+                    <SolidColorBrush x:Key="ToggleButtonBorderBrush" Color="#9CADC1"/>
+                    <SolidColorBrush x:Key="ToggleButtonBorderBrushPointerOver" Color="#7F95AD"/>
+                    <SolidColorBrush x:Key="ToggleButtonBorderBrushPressed" Color="#6B839D"/>
+                    <SolidColorBrush x:Key="ToggleButtonBorderBrushChecked" Color="#246FE5"/>
                     <SolidColorBrush x:Key="TextControlBackground" Color="#FFFFFF"/>
                     <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#F7FAFD"/>
                     <SolidColorBrush x:Key="TextControlForeground" Color="#182233"/>
@@ -94,6 +114,8 @@
                 <Setter Property="CornerRadius" Value="6"/>
                 <Setter Property="FontSize" Value="12"/>
                 <Setter Property="FontFamily" Value="Segoe UI Variable Text, Microsoft YaHei UI, Segoe UI"/>
+                <Setter Property="BorderBrush" Value="{ThemeResource InteractiveBorderBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
             </Style>
 
             <Style x:Key="VeloToolbarButtonStyle" TargetType="Button" BasedOn="{StaticResource CompactButtonStyle}">
@@ -132,6 +154,8 @@
                 <Setter Property="CornerRadius" Value="4"/>
                 <Setter Property="FontSize" Value="12"/>
                 <Setter Property="FontFamily" Value="Segoe UI Variable Text, Microsoft YaHei UI, Segoe UI"/>
+                <Setter Property="BorderBrush" Value="{ThemeResource InteractiveBorderBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
                 <Setter Property="HorizontalAlignment" Value="Stretch"/>
                 <Setter Property="HorizontalContentAlignment" Value="Center"/>
             </Style>
@@ -158,6 +182,8 @@
                 <Setter Property="MinHeight" Value="46"/>
                 <Setter Property="Padding" Value="3"/>
                 <Setter Property="FontSize" Value="11"/>
+                <Setter Property="BorderBrush" Value="{ThemeResource ActionButtonBorderBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
                 <Setter Property="HorizontalAlignment" Value="Stretch"/>
             </Style>
 
@@ -166,6 +192,8 @@
                 <Setter Property="Padding" Value="4,3"/>
                 <Setter Property="FontSize" Value="11"/>
                 <Setter Property="CornerRadius" Value="5"/>
+                <Setter Property="BorderBrush" Value="{ThemeResource ActionButtonBorderBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
                 <Setter Property="HorizontalAlignment" Value="Stretch"/>
                 <Setter Property="HorizontalContentAlignment" Value="Center"/>
             </Style>
@@ -177,6 +205,8 @@
                 <Setter Property="FontSize" Value="11"/>
                 <Setter Property="CornerRadius" Value="4"/>
                 <Setter Property="FontFamily" Value="Segoe UI Variable Text, Microsoft YaHei UI, Segoe UI"/>
+                <Setter Property="BorderBrush" Value="{ThemeResource ActionButtonBorderBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
                 <Setter Property="HorizontalAlignment" Value="Stretch"/>
                 <Setter Property="HorizontalContentAlignment" Value="Center"/>
             </Style>

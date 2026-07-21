@@ -17,13 +17,17 @@ public sealed partial class MainWindow : Window
 
     private async void ImageGridView_OnItemClick(object sender, ItemClickEventArgs e)
     {
-        if (e.ClickedItem is ImageTileViewModel item)
+        if (e.ClickedItem is MediaTileViewModel item)
         {
             _selectedImage = item;
             var selectedCount = ImageGridView.SelectedItems.Count;
-            CategoryHintText.Text = selectedCount > 1
-                ? $"已选中 {selectedCount} 张图片，使用“标记”可批量归类"
-                : $"已选中“{item.FileName}”，使用“标记”归类";
+            CategoryHintText.Text = item.IsVideo
+                ? selectedCount > 1
+                    ? $"已选中 {selectedCount} 个视频，可双击进入沉浸播放"
+                    : $"已选中“{item.FileName}”，可在右侧预览或双击播放"
+                : selectedCount > 1
+                    ? $"已选中 {selectedCount} 张图片，使用“标记”可批量归类"
+                    : $"已选中“{item.FileName}”，使用“标记”归类";
             await UpdateSelectionDetails(item);
         }
     }
@@ -42,7 +46,7 @@ public sealed partial class MainWindow : Window
     private async void ImageGridView_OnRightTapped(object sender, RightTappedRoutedEventArgs e)
     {
         var container = FindGridViewItem(e.OriginalSource as DependencyObject);
-        if (container?.Content is not ImageTileViewModel item)
+        if (container?.Content is not MediaTileViewModel item)
         {
             return;
         }
@@ -55,12 +59,14 @@ public sealed partial class MainWindow : Window
 
         _selectedImage = item;
         var selectedCount = ImageGridView.SelectedItems.Count;
-        CategoryHintText.Text = selectedCount > 1
-            ? $"已选中 {selectedCount} 张图片，右键操作将应用到所选图片"
-            : $"已选中“{item.FileName}”，可使用右键菜单操作";
+        CategoryHintText.Text = item.IsVideo
+            ? $"已选中“{item.FileName}”，可查看或打开文件位置"
+            : selectedCount > 1
+                ? $"已选中 {selectedCount} 张图片，右键操作将应用到所选图片"
+                : $"已选中“{item.FileName}”，可使用右键菜单操作";
         await UpdateSelectionDetails(item);
 
-        var menu = CreateImageContextMenu();
+        var menu = item.IsVideo ? CreateVideoContextMenu() : CreateImageContextMenu();
         menu.ShowAt(container, e.GetPosition(container));
         e.Handled = true;
     }
@@ -111,11 +117,19 @@ public sealed partial class MainWindow : Window
         return menu;
     }
 
+    private MenuFlyout CreateVideoContextMenu()
+    {
+        var menu = new MenuFlyout();
+        menu.Items.Add(CreateImageContextMenuItem("查看", "\uE890", (_, _) => OpenViewer()));
+        menu.Items.Add(CreateImageContextMenuItem("打开文件位置", "\uE8B7", OpenLocationButton_OnClick));
+        return menu;
+    }
+
     private void MoreActionButton_OnClick(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement anchor && _selectedImage is not null)
         {
-            CreateImageContextMenu().ShowAt(anchor);
+            (_selectedImage.IsVideo ? CreateVideoContextMenu() : CreateImageContextMenu()).ShowAt(anchor);
         }
     }
 
@@ -182,12 +196,13 @@ public sealed partial class MainWindow : Window
     private List<ImageRecord> GetSelectedRecords()
     {
         var selected = ImageGridView.SelectedItems
-            .OfType<ImageTileViewModel>()
-            .Select(item => item.Record)
+            .OfType<MediaTileViewModel>()
+            .Where(item => item.Record.Kind == MediaKind.Image)
+            .Select(item => item.Record.AsImageRecord())
             .ToList();
-        if (selected.Count == 0 && _selectedImage is not null)
+        if (selected.Count == 0 && _selectedImage is { Record.Kind: MediaKind.Image })
         {
-            selected.Add(_selectedImage.Record);
+            selected.Add(_selectedImage.Record.AsImageRecord());
         }
 
         return selected
@@ -454,6 +469,7 @@ public sealed partial class MainWindow : Window
             _collections.RemovePath(deletedPath);
             SettingsStore.Save(null, _settings);
             _allImages.RemoveAll(x => string.Equals(x.FullPath, _selectedImage.FullPath, StringComparison.OrdinalIgnoreCase));
+            _allMedia.RemoveAll(x => string.Equals(x.FullPath, _selectedImage.FullPath, StringComparison.OrdinalIgnoreCase));
             _selectedImage = null;
             await UpdateSelectionDetails(null);
             ApplyFilterAndSort();

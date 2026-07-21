@@ -26,13 +26,18 @@ public sealed partial class MainWindow : Window
 {
     private const int MaxInitialTiles = 2000;
 
-    private readonly ImageFileScanner _scanner = new();
-    private readonly ImageLibraryQueryService _libraryQuery = new();
+    private readonly MediaFileScanner _scanner = new();
+    private readonly MediaLibraryQueryService _libraryQuery = new();
+    private readonly VideoThumbnailService _videoThumbnailService = new();
     private readonly SystemMetricsMonitor _metricsMonitor = new();
     private readonly AppSettings _settings;
     private readonly ImageCollectionService _collections;
+    private readonly List<MediaRecord> _allMedia = [];
+    private readonly List<MediaRecord> _filteredMedia = [];
     private readonly List<ImageRecord> _allImages = [];
     private readonly List<ImageRecord> _filteredImages = [];
+    private readonly Dictionary<string, bool> _groupExpandedStates = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<FrameworkElement> _mediaGroupHeaders = [];
     private readonly ConcurrentDictionary<string, ImageDimensions> _imageDimensions = new(StringComparer.OrdinalIgnoreCase);
     private string _currentFolder = string.Empty;
     private bool _isInitializing = true;
@@ -40,14 +45,22 @@ public sealed partial class MainWindow : Window
     private readonly UiDispatcherQueueTimer _thumbnailLayoutTimer;
     private readonly UiDispatcherQueueTimer _thumbnailSettingsTimer;
     private readonly UiDispatcherQueueTimer _filterApplyTimer;
+    private readonly UiDispatcherQueueTimer _previewControlsHideTimer;
+    private readonly UiDispatcherQueueTimer _previewProgressTimer;
+    private readonly UiDispatcherQueueTimer _viewerControlsHideTimer;
+    private readonly UiDispatcherQueueTimer _viewerProgressTimer;
     private int _renderedThumbnailSize;
     private bool _suppressFilterChanges;
     private bool _isResolutionMetadataReady;
     private CancellationTokenSource? _resolutionMetadataCancellation;
     private CancellationTokenSource? _scanCancellation;
+    private CancellationTokenSource? _videoThumbnailCancellation;
     private readonly CancellationTokenSource _lifetimeCancellation = new();
+    private MediaKind _activeMediaKind = MediaKind.Image;
 
-    public ObservableCollection<ImageTileViewModel> Images { get; } = [];
+    public ObservableCollection<MediaTileViewModel> Images { get; } = [];
+
+    public ObservableCollection<MediaGroupViewModel> MediaGroups { get; } = [];
 
     public MainWindow()
     {
@@ -75,17 +88,38 @@ public sealed partial class MainWindow : Window
         _filterApplyTimer.Interval = TimeSpan.FromMilliseconds(180);
         _filterApplyTimer.IsRepeating = false;
         _filterApplyTimer.Tick += FilterApplyTimer_OnTick;
+        _previewControlsHideTimer = DispatcherQueue.CreateTimer();
+        _previewControlsHideTimer.Interval = TimeSpan.FromMilliseconds(2500);
+        _previewControlsHideTimer.IsRepeating = false;
+        _previewControlsHideTimer.Tick += PreviewControlsHideTimer_OnTick;
+        _previewProgressTimer = DispatcherQueue.CreateTimer();
+        _previewProgressTimer.Interval = TimeSpan.FromMilliseconds(250);
+        _previewProgressTimer.Tick += PreviewProgressTimer_OnTick;
+        _viewerControlsHideTimer = DispatcherQueue.CreateTimer();
+        _viewerControlsHideTimer.Interval = TimeSpan.FromMilliseconds(2500);
+        _viewerControlsHideTimer.IsRepeating = false;
+        _viewerControlsHideTimer.Tick += ViewerControlsHideTimer_OnTick;
+        _viewerProgressTimer = DispatcherQueue.CreateTimer();
+        _viewerProgressTimer.Interval = TimeSpan.FromMilliseconds(250);
+        _viewerProgressTimer.Tick += ViewerProgressTimer_OnTick;
         Closed += (_, _) =>
         {
             _metricsTimer.Stop();
             _thumbnailLayoutTimer.Stop();
             _thumbnailSettingsTimer.Stop();
             _filterApplyTimer.Stop();
+            _previewControlsHideTimer.Stop();
+            _previewProgressTimer.Stop();
+            _viewerControlsHideTimer.Stop();
+            _viewerProgressTimer.Stop();
             _lifetimeCancellation.Cancel();
             _scanCancellation?.Cancel();
             _scanCancellation?.Dispose();
             _resolutionMetadataCancellation?.Cancel();
             _resolutionMetadataCancellation?.Dispose();
+            _videoThumbnailCancellation?.Cancel();
+            _videoThumbnailCancellation?.Dispose();
+            StopAndReleaseVideoPlayers();
             SettingsStore.Save(null, _settings);
             _metricsMonitor.Dispose();
             if (!_isSmartClassifying)
@@ -115,7 +149,7 @@ public sealed partial class MainWindow : Window
 
     private async Task ChooseFolderAsync()
     {
-        var folderPath = NativeFolderPicker.PickFolder(WindowNative.GetWindowHandle(this), "选择要导入 VeloPic 的图片文件夹");
+        var folderPath = NativeFolderPicker.PickFolder(WindowNative.GetWindowHandle(this), "选择要导入 VeloPic 的媒体文件夹");
         if (!string.IsNullOrWhiteSpace(folderPath))
         {
             await LoadFolderAsync(folderPath);
@@ -150,7 +184,7 @@ public sealed partial class MainWindow : Window
         try
         {
             var records = await Task.Run(() =>
-                _scanner.EnumerateImages(new ScanOptions(folderPath, Recursive: true), cancellation.Token)
+                _scanner.EnumerateMedia(new ScanOptions(folderPath, Recursive: true), cancellation.Token)
                     .OrderByDescending(x => x.ModifiedAt)
                     .ToList(), cancellation.Token);
 
@@ -160,16 +194,25 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
+            var isNewRoot = !string.Equals(_currentFolder, folderPath, StringComparison.OrdinalIgnoreCase);
+            if (isNewRoot)
+            {
+                _groupExpandedStates.Clear();
+            }
+
+            _allMedia.Clear();
+            _allMedia.AddRange(records);
             _allImages.Clear();
-            _allImages.AddRange(records);
+            _allImages.AddRange(records.Where(record => record.Kind == MediaKind.Image).Select(record => record.AsImageRecord()));
             _currentFolder = folderPath;
             _settings.LastFolder = folderPath;
             SettingsStore.Save(null, _settings);
 
-            UpdateFileTypeFilterOptions(records);
-            StartResolutionMetadataLoad(records);
+            UpdateFileTypeFilterOptions();
+            StartResolutionMetadataLoad(_allImages);
             ApplyFilterAndSort();
-            StatusText.Text = $"扫描完成：{_allImages.Count:N0} 张图片";
+            var videoCount = records.Count(record => record.Kind == MediaKind.Video);
+            StatusText.Text = $"扫描完成：{_allImages.Count:N0} 张图片，{videoCount:N0} 个视频";
             ScanStateText.Text = "扫描已完成";
         }
         catch (OperationCanceledException)
@@ -199,8 +242,9 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void UpdateFileTypeFilterOptions(IReadOnlyList<ImageRecord> records)
+    private void UpdateFileTypeFilterOptions()
     {
+        var records = _allMedia.Where(record => record.Kind == _activeMediaKind).ToList();
         var selectedType = GetSelectedFilterTag(FileTypeFilterBox);
         var fileTypes = records
             .Select(record => Path.GetExtension(record.FullPath).ToLowerInvariant())
@@ -439,9 +483,9 @@ public sealed partial class MainWindow : Window
         _settings.Appearance.ThumbnailSize = (int)e.NewValue;
         var thumbnailSize = CalculateAdaptiveThumbnailSize();
         _renderedThumbnailSize = thumbnailSize;
-        foreach (var item in Images)
+        foreach (var group in MediaGroups)
         {
-            item.UpdateThumbnailSize(thumbnailSize);
+            group.UpdateThumbnailSize(thumbnailSize);
         }
 
         _thumbnailSettingsTimer.Stop();
@@ -487,25 +531,28 @@ public sealed partial class MainWindow : Window
 
         var resolutionLevel = GetSelectedResolutionLevel();
         var fileType = GetSelectedFilterTag(FileTypeFilterBox);
-        var collectionFilter = _activeNavigationFilter switch
+        var collectionFilter = _activeMediaKind == MediaKind.Image ? _activeNavigationFilter switch
         {
             "favorites" => ImageCollectionFilter.Favorites,
             "tags" => ImageCollectionFilter.Tagged,
             "albums" => ImageCollectionFilter.Album,
             "wallpaper" => ImageCollectionFilter.WallpaperFavorites,
             _ => ImageCollectionFilter.All
-        };
+        } : ImageCollectionFilter.All;
         var albumPaths = _activeAlbum is not null && _settings.Albums.TryGetValue(_activeAlbum, out var paths)
             ? paths
             : [];
 
-        _filteredImages.Clear();
-        _filteredImages.AddRange(_libraryQuery.Query(_allImages, new ImageQueryOptions
+        _filteredMedia.Clear();
+        _filteredMedia.AddRange(_libraryQuery.Query(_allMedia, new MediaQueryOptions
         {
+            Kind = _activeMediaKind,
             FileName = FilterNameBox?.Text ?? string.Empty,
-            Resolution = _isResolutionMetadataReady ? resolutionLevel : ImageResolutionLevel.All,
+            Resolution = _activeMediaKind == MediaKind.Image && _isResolutionMetadataReady
+                ? resolutionLevel
+                : ImageResolutionLevel.All,
             FileExtension = fileType,
-            Category = _activeCategory,
+            Category = _activeMediaKind == MediaKind.Image ? _activeCategory : null,
             Collection = collectionFilter,
             Favorites = _collections.Favorites,
             WallpaperFavorites = _collections.WallpaperFavorites,
@@ -516,16 +563,366 @@ public sealed partial class MainWindow : Window
             SortDirection = _settings.Sorting.Direction
         }));
 
+        _filteredImages.Clear();
+        if (_activeMediaKind == MediaKind.Image)
+        {
+            _filteredImages.AddRange(_filteredMedia.Select(record => record.AsImageRecord()));
+        }
+
+        _videoThumbnailCancellation?.Cancel();
+        _videoThumbnailCancellation?.Dispose();
+        _videoThumbnailCancellation = new CancellationTokenSource();
         Images.Clear();
+        MediaGroups.Clear();
         var thumbnailSize = CalculateAdaptiveThumbnailSize();
         _renderedThumbnailSize = thumbnailSize;
-        foreach (var record in _filteredImages.Take(MaxInitialTiles))
+        var limitedRecords = _filteredMedia.Take(MaxInitialTiles).ToList();
+        var itemsByPath = new Dictionary<string, MediaTileViewModel>(StringComparer.OrdinalIgnoreCase);
+        foreach (var record in limitedRecords)
         {
-            Images.Add(new ImageTileViewModel(record, thumbnailSize, _collections.Favorites.Contains(record.FullPath)));
+            var item = new MediaTileViewModel(
+                record,
+                thumbnailSize,
+                _collections.Favorites.Contains(record.FullPath));
+            Images.Add(item);
+            itemsByPath[record.FullPath] = item;
+        }
+
+        var groupedRecords = string.IsNullOrWhiteSpace(_currentFolder)
+            ? []
+            : MediaDirectoryGrouping.Create(limitedRecords, _currentFolder);
+        foreach (var group in groupedRecords)
+        {
+            var items = group.Items
+                .Select(record => itemsByPath[record.FullPath])
+                .ToList();
+
+            var stateKey = GetGroupStateKey(_activeMediaKind, group.DirectoryPath);
+            var isExpanded = !_groupExpandedStates.TryGetValue(stateKey, out var expanded) || expanded;
+            MediaGroups.Add(new MediaGroupViewModel(group.DirectoryPath, group.Title, items, isExpanded));
+        }
+
+        GroupedMediaSource.Source = MediaGroups;
+        ApplyBrowseModeSource();
+        if (_activeMediaKind == MediaKind.Video)
+        {
+            _ = LoadVideoThumbnailsAsync(Images, thumbnailSize, _videoThumbnailCancellation);
         }
 
         EmptyText.Visibility = Images.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         UpdateStatus();
+    }
+
+    private static string GetGroupStateKey(MediaKind kind, string directoryPath) => $"{kind}|{directoryPath}";
+
+    private async Task LoadVideoThumbnailsAsync(
+        IReadOnlyCollection<MediaTileViewModel> items,
+        int thumbnailSize,
+        CancellationTokenSource cancellation)
+    {
+        try
+        {
+            await Task.WhenAll(items
+                .Where(item => item.IsVideo)
+                .Select(async item =>
+                {
+                    var thumbnail = await _videoThumbnailService.LoadAsync(
+                        item.FullPath,
+                        (uint)Math.Max(160, thumbnailSize),
+                        cancellation.Token);
+                    cancellation.Token.ThrowIfCancellationRequested();
+                    if (thumbnail is not null && ReferenceEquals(_videoThumbnailCancellation, cancellation))
+                    {
+                        item.SetThumbnail(thumbnail);
+                    }
+                }));
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void MediaGroupHeader_OnLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement header)
+        {
+            _mediaGroupHeaders.Add(header);
+            UpdateMediaGroupHeaderWidth(header);
+        }
+    }
+
+    private void MediaGroupHeader_OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement header)
+        {
+            _mediaGroupHeaders.Remove(header);
+        }
+    }
+
+    private void ImageGridView_OnSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        UpdateMediaGroupHeaderWidths();
+    }
+
+    private void UpdateMediaGroupHeaderWidths()
+    {
+        foreach (var header in _mediaGroupHeaders.ToList())
+        {
+            UpdateMediaGroupHeaderWidth(header);
+        }
+    }
+
+    private void UpdateMediaGroupHeaderWidth(FrameworkElement header)
+    {
+        // 为 GridView 内边距、项目容器和垂直滚动条预留空间，避免数量被遮挡。
+        header.Width = Math.Max(280, ImageGridView.ActualWidth - 76);
+    }
+
+    private void MediaGroupHeader_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: MediaGroupViewModel group })
+        {
+            return;
+        }
+
+        if (!group.Toggle())
+        {
+            return;
+        }
+
+        if (!group.IsExpanded &&
+            _selectedImage is not null &&
+            group.AllItems.Contains(_selectedImage))
+        {
+            ClearCurrentSelection();
+        }
+
+        _groupExpandedStates[GetGroupStateKey(_activeMediaKind, group.DirectoryPath)] = group.IsExpanded;
+        NotifyMediaGroupChanged(group);
+        UpdateDirectoryGroupActionState();
+        RefreshGroupedMediaLayout();
+    }
+
+    private void CollapseAllGroupsButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        SetAllMediaGroupsExpanded(false);
+    }
+
+    private void ExpandAllGroupsButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        SetAllMediaGroupsExpanded(true);
+    }
+
+    private void SetAllMediaGroupsExpanded(bool isExpanded)
+    {
+        if (_settings.Appearance.BrowseMode != MediaBrowseMode.DirectoryGrouped)
+        {
+            return;
+        }
+
+        if (!isExpanded && _selectedImage is not null)
+        {
+            ClearCurrentSelection();
+        }
+
+        var changed = false;
+        for (var index = 0; index < MediaGroups.Count; index++)
+        {
+            var group = MediaGroups[index];
+            if (group.SetExpanded(isExpanded))
+            {
+                // CollectionViewSource 对组内集合变更的虚拟化刷新并不稳定。
+                // 顶层 Replace 通知会让它立即重新读取 VisibleItems，且不会重建媒体项。
+                MediaGroups[index] = group;
+                changed = true;
+            }
+
+            _groupExpandedStates[GetGroupStateKey(_activeMediaKind, group.DirectoryPath)] = isExpanded;
+        }
+
+        UpdateDirectoryGroupActionState();
+        if (changed)
+        {
+            RefreshGroupedMediaLayout();
+        }
+    }
+
+    private void NotifyMediaGroupChanged(MediaGroupViewModel group)
+    {
+        var index = MediaGroups.IndexOf(group);
+        if (index >= 0)
+        {
+            MediaGroups[index] = group;
+        }
+    }
+
+    private void RefreshGroupedMediaLayout()
+    {
+        if (_settings.Appearance.BrowseMode != MediaBrowseMode.DirectoryGrouped)
+        {
+            return;
+        }
+
+        UpdateMediaGroupHeaderWidths();
+        ImageGridView.InvalidateMeasure();
+        ImageGridView.InvalidateArrange();
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            UpdateMediaGroupHeaderWidths();
+            ImageGridView.InvalidateMeasure();
+            ImageGridView.InvalidateArrange();
+            ImageGridView.UpdateLayout();
+        });
+    }
+
+    private void BrowseModeButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ToggleButton { Tag: string modeTag } ||
+            !Enum.TryParse<MediaBrowseMode>(modeTag, out var mode))
+        {
+            UpdateBrowseModeButtons();
+            return;
+        }
+
+        if (_settings.Appearance.BrowseMode == mode)
+        {
+            UpdateBrowseModeButtons();
+            return;
+        }
+
+        var selectedPath = _selectedImage?.FullPath;
+        ImageGridView.SelectedItems.Clear();
+        _selectedImage = null;
+        _settings.Appearance.BrowseMode = mode;
+        SettingsStore.Save(null, _settings);
+        ApplyBrowseModeSource();
+        RestoreSelectionAfterBrowseModeChange(selectedPath);
+        StatusText.Text = mode == MediaBrowseMode.Flat ? "已切换到平铺浏览" : "已切换到按目录浏览";
+    }
+
+    private void ApplyBrowseModeSource()
+    {
+        var isGrouped = _settings.Appearance.BrowseMode == MediaBrowseMode.DirectoryGrouped;
+        ImageGridView.ItemsSource = isGrouped ? GroupedMediaSource.View : Images;
+        UpdateBrowseModeButtons();
+        if (isGrouped)
+        {
+            RefreshGroupedMediaLayout();
+        }
+    }
+
+    private void RestoreSelectionAfterBrowseModeChange(string? selectedPath)
+    {
+        if (string.IsNullOrWhiteSpace(selectedPath))
+        {
+            _ = UpdateSelectionDetails(null);
+            return;
+        }
+
+        var selectedItem = Images.FirstOrDefault(item =>
+            string.Equals(item.FullPath, selectedPath, StringComparison.OrdinalIgnoreCase));
+        if (selectedItem is null ||
+            _settings.Appearance.BrowseMode == MediaBrowseMode.DirectoryGrouped &&
+            !MediaGroups.Any(group => group.IsExpanded && group.VisibleItems.Contains(selectedItem)))
+        {
+            _ = UpdateSelectionDetails(null);
+            return;
+        }
+
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            ImageGridView.SelectedItem = selectedItem;
+            _selectedImage = selectedItem;
+            _ = UpdateSelectionDetails(selectedItem);
+            ImageGridView.ScrollIntoView(selectedItem);
+        });
+    }
+
+    private void UpdateBrowseModeButtons()
+    {
+        var isGrouped = _settings.Appearance.BrowseMode == MediaBrowseMode.DirectoryGrouped;
+        FlatBrowseModeButton.IsChecked = !isGrouped;
+        DirectoryBrowseModeButton.IsChecked = isGrouped;
+        DirectoryGroupActions.Visibility = isGrouped ? Visibility.Visible : Visibility.Collapsed;
+        AutomationProperties.SetName(FlatBrowseModeButton, $"平铺浏览{(!isGrouped ? "，当前已选" : string.Empty)}");
+        AutomationProperties.SetName(DirectoryBrowseModeButton, $"按目录浏览{(isGrouped ? "，当前已选" : string.Empty)}");
+        UpdateDirectoryGroupActionState();
+    }
+
+    private void UpdateDirectoryGroupActionState()
+    {
+        var isGrouped = _settings.Appearance.BrowseMode == MediaBrowseMode.DirectoryGrouped;
+        CollapseAllGroupsButton.IsEnabled = isGrouped && MediaGroups.Any(group => group.IsExpanded);
+        ExpandAllGroupsButton.IsEnabled = isGrouped && MediaGroups.Any(group => !group.IsExpanded);
+    }
+
+    private void MediaKindButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ToggleButton { Tag: string kindTag } ||
+            !Enum.TryParse<MediaKind>(kindTag, out var kind) ||
+            kind == _activeMediaKind)
+        {
+            UpdateMediaKindButtons();
+            return;
+        }
+
+        StopAndReleaseVideoPlayers();
+        ClearCurrentSelection();
+        _activeMediaKind = kind;
+        if (kind == MediaKind.Video && _activeNavigationFilter is not null)
+        {
+            _activeNavigationFilter = null;
+            _activeNavigationSection = "folder";
+            _activeAlbum = null;
+            _activeCategory = null;
+            SetNavigationSelection("folder");
+            SetCategorySelection(null, showAll: true);
+        }
+
+        _suppressFilterChanges = true;
+        ResolutionFilterBox.SelectedIndex = 0;
+        _suppressFilterChanges = false;
+        ResolutionFilterBox.IsEnabled = kind == MediaKind.Image && _isResolutionMetadataReady && _imageDimensions.Count > 0;
+        UpdateImageOnlyNavigationState();
+        UpdateSelectionActionState(false, false);
+        _ = UpdateSelectionDetails(null);
+        UpdateMediaKindButtons();
+        UpdateFileTypeFilterOptions();
+        UpdateFilterButtonState();
+        ApplyFilterAndSort();
+    }
+
+    private void UpdateMediaKindButtons()
+    {
+        ImageKindButton.IsChecked = _activeMediaKind == MediaKind.Image;
+        VideoKindButton.IsChecked = _activeMediaKind == MediaKind.Video;
+        FilterPanelTitle.Text = _activeMediaKind == MediaKind.Image ? "筛选图片" : "筛选视频";
+        EmptyMessageText.Text = _activeMediaKind == MediaKind.Image
+            ? "选择一个图片文件夹开始浏览"
+            : "选择一个包含视频的文件夹开始浏览";
+        ResolutionFilterSection.Visibility = _activeMediaKind == MediaKind.Image
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    private void UpdateImageOnlyNavigationState()
+    {
+        var isImage = _activeMediaKind == MediaKind.Image;
+        foreach (var element in new UIElement[]
+                 {
+                     FavoritesNavigationItem,
+                     AlbumsNavigationItem,
+                     TagsNavigationItem,
+                     WallpaperNavigationItem,
+                     ManualClassificationButton,
+                     SmartClassificationButton,
+                     AllPhotosCategoryButton,
+                     CategoryListPanel
+                 })
+        {
+            element.IsHitTestVisible = isImage;
+            element.Opacity = isImage ? 1 : 0.45;
+        }
     }
 
     private ImageResolutionLevel GetSelectedResolutionLevel()
@@ -583,24 +980,26 @@ public sealed partial class MainWindow : Window
         }
 
         _renderedThumbnailSize = thumbnailSize;
-        foreach (var item in Images)
+        foreach (var group in MediaGroups)
         {
-            item.UpdateThumbnailSize(thumbnailSize);
+            group.UpdateThumbnailSize(thumbnailSize);
         }
     }
 
     private void UpdateStatus()
     {
         CurrentFolderText.Text = string.IsNullOrWhiteSpace(_currentFolder) ? "未选择目录" : _currentFolder;
-        HeaderPathText.Text = string.IsNullOrWhiteSpace(_currentFolder) ? "尚未选择图片文件夹" : _currentFolder;
-        FolderStatsText.Text = $"{_allImages.Count:N0} 张图片";
+        HeaderPathText.Text = string.IsNullOrWhiteSpace(_currentFolder) ? "尚未选择媒体文件夹" : _currentFolder;
+        var totalCount = _allMedia.Count(record => record.Kind == _activeMediaKind);
+        var unit = _activeMediaKind == MediaKind.Image ? "张图片" : "个视频";
+        FolderStatsText.Text = $"{totalCount:N0} {unit}";
         UpdateStorageStatus();
         GalleryTitle.Text = string.IsNullOrWhiteSpace(_activeCategory)
-            ? $"{GetNavigationTitle()}  {_filteredImages.Count:N0} 张图片"
-            : $"{_activeCategory}  {_filteredImages.Count:N0} 张图片";
-        ScanProgressText.Text = $"显示：{Images.Count:N0} / {_filteredImages.Count:N0}";
-        CacheStatusText.Text = _filteredImages.Count > MaxInitialTiles
-            ? $"已虚拟化加载前 {MaxInitialTiles:N0} 张，搜索可缩小范围"
+            ? $"{GetNavigationTitle()}  {_filteredMedia.Count:N0} {unit}"
+            : $"{_activeCategory}  {_filteredMedia.Count:N0} {unit}";
+        ScanProgressText.Text = $"显示：{Images.Count:N0} / {_filteredMedia.Count:N0}";
+        CacheStatusText.Text = _filteredMedia.Count > MaxInitialTiles
+            ? $"已虚拟化加载前 {MaxInitialTiles:N0} 个，筛选可缩小范围"
             : "缩略图按需加载";
         UpdateCategoryCounts();
         UpdateCollectionActionLabels();
@@ -671,8 +1070,10 @@ public sealed partial class MainWindow : Window
             ? $"{gpuUsage:0}%"
             : "--";
 
-        PerformanceStatusText.Text =
-            $"CPU {metrics.CpuUsagePercent:0}%  |  内存 {metrics.UsedMemoryGiB:0.0}/{metrics.TotalMemoryGiB:0.0} GB ({metrics.MemoryUsagePercent:0}%)  |  GPU {gpuText}";
+        CpuStatusText.Text = $"CPU {metrics.CpuUsagePercent:0}%";
+        MemoryStatusText.Text =
+            $"内存 {metrics.UsedMemoryGiB:0.0}/{metrics.TotalMemoryGiB:0.0} GB ({metrics.MemoryUsagePercent:0}%)";
+        GpuStatusText.Text = $"GPU {gpuText}";
     }
 
 }

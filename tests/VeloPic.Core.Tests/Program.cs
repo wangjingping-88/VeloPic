@@ -1,3 +1,5 @@
+using System.Buffers.Binary;
+using System.Text;
 using VeloPic.Core;
 
 var tests = new List<(string Name, Action Run)>
@@ -8,12 +10,18 @@ var tests = new List<(string Name, Action Run)>
     ("主题解析符合跟随系统和手动模式", ThemeResolverTests.ResolvesThemeModes),
     ("常用分辨率筛选兼容横图和竖图", ImageResolutionFilterTests.MatchesCommonResolutionLevels),
     ("设置文件可以往返保存", SettingsStoreTests.RoundTripsSettings),
+    ("旧设置默认使用平铺浏览模式", SettingsStoreTests.UsesFlatBrowseModeForLegacySettings),
     ("收藏和相册删除结果可以持久化", SettingsStoreTests.RoundTripsCollectionRemoval),
     ("设置保存使用原子替换", SettingsStoreTests.ReplacesSettingsAtomically),
     ("图片扫描支持取消", ImageFileScannerTests.HonorsCancellation),
     ("图库查询组合筛选和排序正确", ImageLibraryQueryServiceTests.FiltersAndSorts),
     ("集合服务同步收藏和相册设置", ImageCollectionServiceTests.SynchronizesSettings),
-    ("查看器导航支持首尾循环", ImageViewerNavigatorTests.WrapsAround)
+    ("查看器导航支持首尾循环", ImageViewerNavigatorTests.WrapsAround),
+    ("媒体扫描识别图片和常见视频格式", MediaFileScannerTests.SupportsAndScansMedia),
+    ("媒体查询按类型筛选并在目录内排序", MediaLibraryQueryServiceTests.FiltersByKindAndSorts),
+    ("目录分组生成完整相对路径标题", MediaDirectoryGroupingTests.BuildsRelativeDirectoryTitles),
+    ("媒体查看导航支持首尾循环", MediaViewerNavigatorTests.WrapsAround),
+    ("分片 MP4 可以读取真实视频时长", Mp4DurationReaderTests.ReadsFragmentTimelineDuration)
 };
 
 var failed = 0;
@@ -157,7 +165,8 @@ static class SettingsStoreTests
             {
                 Theme = VeloPicThemeMode.Dark,
                 ThumbnailSize = 220,
-                WallpaperFit = "fit"
+                WallpaperFit = "fit",
+                BrowseMode = MediaBrowseMode.DirectoryGrouped
             },
             Sorting = new SortingSettings
             {
@@ -176,12 +185,32 @@ static class SettingsStoreTests
         AssertEx.Equal(VeloPicThemeMode.Dark, loaded.Appearance.Theme, "应保存主题");
         AssertEx.Equal(220, loaded.Appearance.ThumbnailSize, "应保存缩略图大小");
         AssertEx.Equal("fit", loaded.Appearance.WallpaperFit, "应保存壁纸显示模式");
+        AssertEx.Equal(MediaBrowseMode.DirectoryGrouped, loaded.Appearance.BrowseMode, "应保存媒体浏览模式");
         AssertEx.Equal(ImageSortField.FileSize, loaded.Sorting.Field, "应保存排序字段");
         AssertEx.Equal(ImageSortDirection.Ascending, loaded.Sorting.Direction, "应保存排序方向");
         AssertEx.Equal(2, loaded.Favorites.Count, "应保存收藏列表");
         AssertEx.Equal(2, loaded.CustomCategories.Count, "应保存自定义标签");
         AssertEx.Equal("建筑", loaded.CustomCategories[0], "应保留自定义标签名称");
         AssertEx.Equal("风景", loaded.Categories["a.jpg"], "应保存手动分类");
+    }
+
+    public static void UsesFlatBrowseModeForLegacySettings()
+    {
+        using var root = TempDirectory.Create();
+        var path = Path.Combine(root.Path, "settings.json");
+        File.WriteAllText(path, """
+        {
+          "appearance": {
+            "theme": "system",
+            "thumbnailSize": 190,
+            "wallpaperFit": "fill"
+          }
+        }
+        """);
+
+        var loaded = SettingsStore.Load(path);
+
+        AssertEx.Equal(MediaBrowseMode.Flat, loaded.Appearance.BrowseMode, "旧设置缺少浏览模式时应使用平铺模式");
     }
 
     public static void RoundTripsCollectionRemoval()
@@ -276,6 +305,161 @@ static class ImageViewerNavigatorTests
         AssertEx.Equal(second, navigator.Open([first, second], second.FullPath), "应从选中图片打开");
         AssertEx.Equal(first, navigator.Next(), "末张的下一张应回到首张");
         AssertEx.Equal(second, navigator.Previous(), "首张的上一张应回到末张");
+    }
+}
+
+static class MediaFileScannerTests
+{
+    public static void SupportsAndScansMedia()
+    {
+        foreach (var extension in new[]
+                 {
+                     ".mp4", ".m4v", ".mov", ".avi", ".wmv", ".mkv", ".webm",
+                     ".mpeg", ".mpg", ".3gp", ".mts", ".m2ts"
+                 })
+        {
+            AssertEx.True(MediaFileScanner.IsSupportedVideo($"clip{extension}"), $"应识别 {extension} 视频");
+        }
+
+        AssertEx.True(MediaFileScanner.IsSupportedVideo("clip.MP4"), "视频扩展名识别应忽略大小写");
+        AssertEx.True(!MediaFileScanner.IsSupportedVideo("audio.mp3"), "不应把音频识别为视频");
+
+        using var root = TempDirectory.Create();
+        Directory.CreateDirectory(Path.Combine(root.Path, "nested"));
+        File.WriteAllText(Path.Combine(root.Path, "cover.jpg"), "fake");
+        File.WriteAllText(Path.Combine(root.Path, "nested", "clip.webm"), "fake");
+        File.WriteAllText(Path.Combine(root.Path, "notes.txt"), "fake");
+
+        var records = new MediaFileScanner()
+            .EnumerateMedia(new ScanOptions(root.Path, Recursive: true))
+            .ToList();
+
+        AssertEx.Equal(2, records.Count, "扫描应同时返回图片和视频");
+        AssertEx.Equal(1, records.Count(record => record.Kind == MediaKind.Image), "应返回一张图片");
+        AssertEx.Equal(1, records.Count(record => record.Kind == MediaKind.Video), "应返回一个视频");
+    }
+}
+
+static class MediaLibraryQueryServiceTests
+{
+    public static void FiltersByKindAndSorts()
+    {
+        var image = new MediaRecord("C:\\library\\cover.jpg", "cover.jpg", "C:\\library", 50, DateTimeOffset.MinValue, MediaKind.Image);
+        var largeVideo = new MediaRecord("C:\\library\\b.mp4", "b.mp4", "C:\\library", 300, DateTimeOffset.MinValue, MediaKind.Video);
+        var smallVideo = new MediaRecord("C:\\library\\a.mp4", "a.mp4", "C:\\library", 100, DateTimeOffset.MinValue, MediaKind.Video);
+
+        var result = new MediaLibraryQueryService().Query([image, largeVideo, smallVideo], new MediaQueryOptions
+        {
+            Kind = MediaKind.Video,
+            FileExtension = ".mp4",
+            SortField = ImageSortField.FileSize,
+            SortDirection = ImageSortDirection.Ascending
+        });
+
+        AssertEx.Equal(2, result.Count, "视频标签应只返回视频");
+        AssertEx.Equal(smallVideo, result[0], "组内应按文件大小升序排列");
+        AssertEx.Equal(largeVideo, result[1], "较大视频应排在后面");
+    }
+}
+
+static class MediaDirectoryGroupingTests
+{
+    public static void BuildsRelativeDirectoryTitles()
+    {
+        using var root = TempDirectory.Create();
+        var nested = Path.Combine(root.Path, "人物", "动漫人物");
+        Directory.CreateDirectory(nested);
+        var rootRecord = new MediaRecord(Path.Combine(root.Path, "root.jpg"), "root.jpg", root.Path, 1, DateTimeOffset.MinValue, MediaKind.Image);
+        var nestedRecord = new MediaRecord(Path.Combine(nested, "nested.jpg"), "nested.jpg", nested, 1, DateTimeOffset.MinValue, MediaKind.Image);
+
+        var groups = MediaDirectoryGrouping.Create([nestedRecord, rootRecord], root.Path);
+        var rootName = Path.GetFileName(root.Path);
+
+        AssertEx.Equal(2, groups.Count, "根目录和深层目录应分别成组");
+        AssertEx.True(groups.Any(group => group.Title == rootName), "根目录文件应使用根目录名称作为标题");
+        AssertEx.True(groups.Any(group => group.Title == Path.Combine(rootName, "人物", "动漫人物")), "深层目录标题应保留完整相对层级");
+    }
+}
+
+static class MediaViewerNavigatorTests
+{
+    public static void WrapsAround()
+    {
+        var first = new MediaRecord("a.mp4", "a.mp4", string.Empty, 1, DateTimeOffset.MinValue, MediaKind.Video);
+        var second = new MediaRecord("b.mp4", "b.mp4", string.Empty, 1, DateTimeOffset.MinValue, MediaKind.Video);
+        var navigator = new MediaViewerNavigator();
+
+        AssertEx.Equal(second, navigator.Open([first, second], second.FullPath), "应从选中视频打开");
+        AssertEx.Equal(first, navigator.Next(), "末个视频的下一个应回到首个");
+        AssertEx.Equal(second, navigator.Previous(), "首个视频的上一个应回到末个");
+    }
+}
+
+static class Mp4DurationReaderTests
+{
+    public static void ReadsFragmentTimelineDuration()
+    {
+        using var root = TempDirectory.Create();
+        var path = Path.Combine(root.Path, "fragmented.mp4");
+        File.WriteAllBytes(path, CreateFragmentedMp4());
+
+        var duration = Mp4DurationReader.TryRead(path);
+
+        AssertEx.True(duration.HasValue, "应从分片时间线读取视频时长");
+        AssertEx.True(Math.Abs(duration.GetValueOrDefault().TotalSeconds - 20.02) < 0.001, "分片视频时长应为 20.02 秒");
+    }
+
+    private static byte[] CreateFragmentedMp4()
+    {
+        var trackHeader = Box("tkhd", Concat(UInt32(0), UInt32(0), UInt32(0), UInt32(1)));
+        var mediaHeader = Box("mdhd", Concat(UInt32(0), UInt32(0), UInt32(0), UInt32(30000), UInt32(0)));
+        var handler = Box("hdlr", Concat(UInt32(0), UInt32(0), Encoding.ASCII.GetBytes("vide")));
+        var media = Box("mdia", Concat(mediaHeader, handler));
+        var track = Box("trak", Concat(trackHeader, media));
+
+        var trackExtends = Box("trex", Concat(UInt32(0), UInt32(1), UInt32(1), UInt32(1001)));
+        var movieExtends = Box("mvex", trackExtends);
+        var movie = Box("moov", Concat(track, movieExtends));
+
+        var fragmentHeader = Box("tfhd", Concat(UInt32(0x000008), UInt32(1), UInt32(1001)));
+        var decodeTime = Box("tfdt", Concat(UInt32(0x01000000), UInt64(500500)));
+        var trackRun = Box("trun", Concat(UInt32(0), UInt32(100)));
+        var trackFragment = Box("traf", Concat(fragmentHeader, decodeTime, trackRun));
+        var movieFragment = Box("moof", trackFragment);
+
+        return Concat(movie, movieFragment);
+    }
+
+    private static byte[] Box(string type, byte[] payload)
+    {
+        return Concat(UInt32((uint)(8 + payload.Length)), Encoding.ASCII.GetBytes(type), payload);
+    }
+
+    private static byte[] UInt32(uint value)
+    {
+        var bytes = new byte[4];
+        BinaryPrimitives.WriteUInt32BigEndian(bytes, value);
+        return bytes;
+    }
+
+    private static byte[] UInt64(ulong value)
+    {
+        var bytes = new byte[8];
+        BinaryPrimitives.WriteUInt64BigEndian(bytes, value);
+        return bytes;
+    }
+
+    private static byte[] Concat(params byte[][] parts)
+    {
+        var result = new byte[parts.Sum(part => part.Length)];
+        var offset = 0;
+        foreach (var part in parts)
+        {
+            Buffer.BlockCopy(part, 0, result, offset, part.Length);
+            offset += part.Length;
+        }
+
+        return result;
     }
 }
 

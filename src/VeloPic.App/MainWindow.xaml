@@ -11,6 +11,11 @@
           SizeChanged="RootGrid_OnSizeChanged"
           KeyboardAcceleratorPlacementMode="Hidden"
           Background="{ThemeResource AppBackgroundBrush}">
+        <Grid.Resources>
+            <CollectionViewSource x:Name="GroupedMediaSource"
+                                  IsSourceGrouped="True"
+                                  ItemsPath="VisibleItems"/>
+        </Grid.Resources>
         <Grid.KeyboardAccelerators>
             <KeyboardAccelerator Key="Escape" Invoked="ViewerEscapeAccelerator_OnInvoked"/>
             <KeyboardAccelerator Key="Left" Invoked="ViewerPreviousAccelerator_OnInvoked"/>
@@ -131,7 +136,7 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Text="筛选图片" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="FilterPanelTitle" Text="筛选图片" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
                                     <Button Grid.Column="1"
                                             Style="{StaticResource QuietActionButtonStyle}"
                                             Click="ResetFiltersButton_OnClick"
@@ -142,20 +147,22 @@
                                          Height="36"
                                          PlaceholderText="输入文件名"
                                          TextChanged="FilterNameBox_OnTextChanged"/>
-                                <TextBlock Text="分辨率" Style="{StaticResource SectionLabelStyle}"/>
-                                <ComboBox x:Name="ResolutionFilterBox"
-                                          HorizontalAlignment="Stretch"
-                                          SelectedIndex="0"
-                                          IsEnabled="False"
-                                          SelectionChanged="FilterBox_OnSelectionChanged">
-                                    <ComboBoxItem Content="全部分辨率" Tag="all"/>
-                                    <ComboBoxItem Content="4K 及以上（3840 × 2160）" Tag="4k"/>
-                                    <ComboBoxItem Content="2K 及以上（2560 × 1440）" Tag="2k"/>
-                                    <ComboBoxItem Content="1K 及以上（1920 × 1080）" Tag="1k"/>
-                                </ComboBox>
-                                <TextBlock x:Name="FilterMetadataStatusText"
-                                           Text="选择文件夹后读取分辨率"
-                                           Style="{StaticResource SecondaryTextStyle}"/>
+                                <StackPanel x:Name="ResolutionFilterSection" Spacing="10">
+                                    <TextBlock Text="分辨率" Style="{StaticResource SectionLabelStyle}"/>
+                                    <ComboBox x:Name="ResolutionFilterBox"
+                                              HorizontalAlignment="Stretch"
+                                              SelectedIndex="0"
+                                              IsEnabled="False"
+                                              SelectionChanged="FilterBox_OnSelectionChanged">
+                                        <ComboBoxItem Content="全部分辨率" Tag="all"/>
+                                        <ComboBoxItem Content="4K 及以上（3840 × 2160）" Tag="4k"/>
+                                        <ComboBoxItem Content="2K 及以上（2560 × 1440）" Tag="2k"/>
+                                        <ComboBoxItem Content="1K 及以上（1920 × 1080）" Tag="1k"/>
+                                    </ComboBox>
+                                    <TextBlock x:Name="FilterMetadataStatusText"
+                                               Text="选择文件夹后读取分辨率"
+                                               Style="{StaticResource SecondaryTextStyle}"/>
+                                </StackPanel>
                                 <TextBlock Text="文件类型" Style="{StaticResource SectionLabelStyle}"/>
                                 <ComboBox x:Name="FileTypeFilterBox"
                                           HorizontalAlignment="Stretch"
@@ -461,6 +468,7 @@
         <Grid x:Name="MainContent" Grid.Row="1" Grid.Column="1" Margin="0,8,6,8" RowSpacing="8">
             <Grid.RowDefinitions>
                 <RowDefinition Height="50"/>
+                <RowDefinition Height="36"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
@@ -497,18 +505,144 @@
                 </Grid>
             </Border>
 
-            <Border Grid.Row="1" Style="{StaticResource InsetPanelStyle}">
+            <Grid Grid.Row="1" ColumnSpacing="12" HorizontalAlignment="Left" VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Grid ColumnSpacing="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="92"/>
+                        <ColumnDefinition Width="92"/>
+                    </Grid.ColumnDefinitions>
+                    <ToggleButton x:Name="ImageKindButton"
+                                  Grid.Column="0"
+                                  Tag="Image"
+                                  Content="图片"
+                                  IsChecked="True"
+                                  Style="{StaticResource SelectionToggleButtonStyle}"
+                                  Click="MediaKindButton_OnClick"/>
+                    <ToggleButton x:Name="VideoKindButton"
+                                  Grid.Column="1"
+                                  Tag="Video"
+                                  Content="视频"
+                                  Style="{StaticResource SelectionToggleButtonStyle}"
+                                  Click="MediaKindButton_OnClick"/>
+                </Grid>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                    <TextBlock Text="浏览"
+                               Margin="2,0,4,0"
+                               Style="{StaticResource SecondaryTextStyle}"
+                               VerticalAlignment="Center"/>
+                    <ToggleButton x:Name="FlatBrowseModeButton"
+                                  Width="68"
+                                  Tag="Flat"
+                                  Content="平铺"
+                                  Style="{StaticResource SelectionToggleButtonStyle}"
+                                  Click="BrowseModeButton_OnClick"/>
+                    <ToggleButton x:Name="DirectoryBrowseModeButton"
+                                  Width="76"
+                                  Tag="DirectoryGrouped"
+                                  Content="按目录"
+                                  Style="{StaticResource SelectionToggleButtonStyle}"
+                                  Click="BrowseModeButton_OnClick"/>
+                </StackPanel>
+
+                <StackPanel x:Name="DirectoryGroupActions"
+                            Grid.Column="2"
+                            Orientation="Horizontal"
+                            Spacing="2"
+                            VerticalAlignment="Center"
+                            Visibility="Collapsed">
+                    <Button x:Name="CollapseAllGroupsButton"
+                            Width="30"
+                            Height="28"
+                            Padding="0"
+                            Style="{StaticResource QuietActionButtonStyle}"
+                            ToolTipService.ToolTip="全部折叠"
+                            AutomationProperties.Name="全部折叠目录"
+                            Click="CollapseAllGroupsButton_OnClick">
+                        <FontIcon Glyph="&#xE70E;" FontSize="12"/>
+                    </Button>
+                    <Button x:Name="ExpandAllGroupsButton"
+                            Width="30"
+                            Height="28"
+                            Padding="0"
+                            Style="{StaticResource QuietActionButtonStyle}"
+                            ToolTipService.ToolTip="全部展开"
+                            AutomationProperties.Name="全部展开目录"
+                            Click="ExpandAllGroupsButton_OnClick">
+                        <FontIcon Glyph="&#xE70D;" FontSize="12"/>
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <Border Grid.Row="2" Style="{StaticResource InsetPanelStyle}">
                 <Grid>
                     <GridView x:Name="ImageGridView"
-                              ItemsSource="{x:Bind Images}"
                               SelectionMode="Extended"
                               IsItemClickEnabled="True"
                               ItemClick="ImageGridView_OnItemClick"
                               SelectionChanged="ImageGridView_OnSelectionChanged"
                               DoubleTapped="ImageGridView_OnDoubleTapped"
                               RightTapped="ImageGridView_OnRightTapped"
+                              SizeChanged="ImageGridView_OnSizeChanged"
                               Background="Transparent"
                               Padding="8,8,10,8">
+                        <GridView.GroupStyle>
+                            <GroupStyle HidesIfEmpty="False">
+                                <GroupStyle.HeaderTemplate>
+                                    <DataTemplate>
+                                        <Button Tag="{Binding}"
+                                                Height="30"
+                                                Margin="4,5,24,1"
+                                                Padding="4,0"
+                                                MinWidth="320"
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Stretch"
+                                                Background="Transparent"
+                                                BorderBrush="Transparent"
+                                                BorderThickness="0"
+                                                Loaded="MediaGroupHeader_OnLoaded"
+                                                Unloaded="MediaGroupHeader_OnUnloaded"
+                                                Click="MediaGroupHeader_OnClick">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding Title}"
+                                                           FontSize="12"
+                                                           FontWeight="SemiBold"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           VerticalAlignment="Center"/>
+                                                <Border Grid.Column="1"
+                                                        MinWidth="38"
+                                                        Margin="10,0,8,0"
+                                                        Padding="7,2"
+                                                        CornerRadius="10"
+                                                        Background="{ThemeResource AccentSoftBrush}"
+                                                        HorizontalAlignment="Right">
+                                                    <TextBlock Text="{Binding CountText}"
+                                                               FontSize="11"
+                                                               TextAlignment="Center"
+                                                               HorizontalAlignment="Center"/>
+                                                </Border>
+                                                <FontIcon Grid.Column="2"
+                                                          Glyph="{Binding ChevronGlyph}"
+                                                          Width="18"
+                                                          FontSize="11"
+                                                          Foreground="{ThemeResource TextSecondaryBrush}"
+                                                          VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </GroupStyle.HeaderTemplate>
+                            </GroupStyle>
+                        </GridView.GroupStyle>
                         <GridView.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <ItemsWrapGrid Orientation="Horizontal"/>
@@ -531,6 +665,23 @@
                                         <Image Grid.Row="0"
                                                Source="{Binding Thumbnail}"
                                                Stretch="UniformToFill"/>
+                                        <FontIcon Grid.Row="0"
+                                                  Glyph="&#xE714;"
+                                                  FontSize="30"
+                                                  Foreground="{ThemeResource TextTertiaryBrush}"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"
+                                                  Visibility="{Binding VideoFallbackVisibility}"/>
+                                        <Border Grid.Row="0"
+                                                Width="34"
+                                                Height="34"
+                                                CornerRadius="17"
+                                                Background="#B3000000"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Visibility="{Binding VideoPlayBadgeVisibility}">
+                                            <FontIcon Glyph="&#xE768;" FontSize="16" Foreground="White"/>
+                                        </Border>
                                         <Border Grid.Row="1" Background="#A6000000" Padding="7,4">
                                             <TextBlock Text="{Binding FileName}" Foreground="White" FontSize="11" TextTrimming="CharacterEllipsis"/>
                                         </Border>
@@ -548,7 +699,10 @@
                     </GridView>
                     <StackPanel x:Name="EmptyText" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
                         <FontIcon Glyph="&#xEB9F;" FontSize="28" Foreground="{ThemeResource TextTertiaryBrush}"/>
-                        <TextBlock Text="选择一个图片文件夹开始浏览" Style="{StaticResource SecondaryTextStyle}" FontSize="14"/>
+                        <TextBlock x:Name="EmptyMessageText"
+                                   Text="选择一个图片文件夹开始浏览"
+                                   Style="{StaticResource SecondaryTextStyle}"
+                                   FontSize="14"/>
                     </StackPanel>
                 </Grid>
             </Border>
@@ -566,7 +720,87 @@
                             Background="{ThemeResource CardBackgroundBrush}"
                             BorderBrush="{ThemeResource BorderSubtleBrush}"
                             BorderThickness="1">
-                        <Image x:Name="PreviewImage" Stretch="Uniform" Margin="6"/>
+                        <Grid x:Name="PreviewVideoSurface"
+                              PointerPressed="PreviewVideoSurface_OnPointerPressed">
+                            <Image x:Name="PreviewImage" Stretch="Uniform" Margin="6"/>
+                            <MediaPlayerElement x:Name="PreviewVideoPlayer"
+                                                Visibility="Collapsed"
+                                                AreTransportControlsEnabled="False"
+                                                AutoPlay="False"
+                                                Stretch="Uniform"/>
+                            <Border x:Name="PreviewVideoControls"
+                                    Visibility="Collapsed"
+                                    VerticalAlignment="Bottom"
+                                    Margin="6"
+                                    Padding="4"
+                                    CornerRadius="4"
+                                    Background="#D9181C23">
+                                <Grid ColumnSpacing="6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button x:Name="PreviewPlayPauseButton"
+                                            Width="30"
+                                            Height="30"
+                                            MinWidth="30"
+                                            MinHeight="30"
+                                            Padding="0"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Click="PreviewPlayPauseButton_OnClick"
+                                            AutomationProperties.Name="播放"
+                                            ToolTipService.ToolTip="播放或暂停">
+                                        <FontIcon x:Name="PreviewPlayPauseIcon"
+                                                  Glyph="&#xE768;"
+                                                  FontSize="14"
+                                                  Foreground="White"/>
+                                    </Button>
+                                    <Slider x:Name="PreviewProgressSlider"
+                                            Grid.Column="1"
+                                            Height="30"
+                                            Minimum="0"
+                                            Maximum="1"
+                                            ValueChanged="PreviewProgressSlider_OnValueChanged"
+                                            AutomationProperties.Name="播放进度"/>
+                                    <TextBlock x:Name="PreviewVideoTimeText"
+                                               Grid.Column="2"
+                                               MinWidth="62"
+                                               Text="0:00 / 0:00"
+                                               FontSize="10"
+                                               Foreground="White"
+                                               TextAlignment="Right"
+                                               VerticalAlignment="Center"/>
+                                    <Button x:Name="PreviewMuteButton"
+                                            Grid.Column="3"
+                                            Width="30"
+                                            Height="30"
+                                            MinWidth="30"
+                                            MinHeight="30"
+                                            Padding="0"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Click="PreviewMuteButton_OnClick"
+                                            AutomationProperties.Name="静音"
+                                            ToolTipService.ToolTip="静音或恢复声音">
+                                        <FontIcon x:Name="PreviewMuteIcon"
+                                                  Glyph="&#xE767;"
+                                                  FontSize="14"
+                                                  Foreground="White"/>
+                                    </Button>
+                                </Grid>
+                            </Border>
+                            <TextBlock x:Name="PreviewVideoErrorText"
+                                       Visibility="Collapsed"
+                                       Text="无法播放此视频，请检查系统编解码器。"
+                                       TextWrapping="Wrap"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Margin="16"
+                                       Style="{StaticResource SecondaryTextStyle}"/>
+                        </Grid>
                     </Border>
 
                     <TextBlock x:Name="DetailFileName"
@@ -715,7 +949,14 @@
                     <ComboBox x:Name="WallpaperDisplayBox" Height="32" HorizontalAlignment="Stretch" SelectedIndex="0" IsEnabled="False">
                         <ComboBoxItem Content="所有显示器"/>
                     </ComboBox>
-                    <Button x:Name="WallpaperButton" IsEnabled="False" Height="34" HorizontalAlignment="Stretch" Style="{StaticResource CompactButtonStyle}" Click="WallpaperButton_OnClick">
+                    <Button x:Name="WallpaperButton"
+                            IsEnabled="False"
+                            Height="34"
+                            HorizontalAlignment="Stretch"
+                            BorderBrush="{ThemeResource ActionButtonBorderBrush}"
+                            BorderThickness="1"
+                            Style="{StaticResource CompactButtonStyle}"
+                            Click="WallpaperButton_OnClick">
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="6">
                             <FontIcon Glyph="&#xE7F4;" FontSize="13"/>
                             <TextBlock Text="设为壁纸" FontSize="11"/>
@@ -734,16 +975,54 @@
                 Padding="16,0">
             <Grid>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="18">
-                    <TextBlock x:Name="StatusText" Text="就绪" Style="{StaticResource SecondaryTextStyle}"/>
+                    <TextBlock x:Name="StatusText"
+                               Width="220"
+                               Text="就绪"
+                               TextTrimming="CharacterEllipsis"
+                               Style="{StaticResource SecondaryTextStyle}"/>
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <Ellipse Width="8" Height="8" Fill="{ThemeResource SuccessBrush}"/>
-                        <TextBlock x:Name="PerformanceStatusText"
-                                   Text="CPU --  |  内存 --  |  GPU --"
-                                   Style="{StaticResource SecondaryTextStyle}"/>
+                        <Grid Width="294" ColumnSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="56"/>
+                                <ColumnDefinition Width="1"/>
+                                <ColumnDefinition Width="158"/>
+                                <ColumnDefinition Width="1"/>
+                                <ColumnDefinition Width="54"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="CpuStatusText"
+                                       Text="CPU --"
+                                       VerticalAlignment="Center"
+                                       Style="{StaticResource SecondaryTextStyle}"/>
+                            <Border Grid.Column="1"
+                                    Width="1"
+                                    Height="12"
+                                    VerticalAlignment="Center"
+                                    Background="{ThemeResource BorderSubtleBrush}"/>
+                            <TextBlock x:Name="MemoryStatusText"
+                                       Grid.Column="2"
+                                       Text="内存 --/-- GB (--%)"
+                                       VerticalAlignment="Center"
+                                       Style="{StaticResource SecondaryTextStyle}"/>
+                            <Border Grid.Column="3"
+                                    Width="1"
+                                    Height="12"
+                                    VerticalAlignment="Center"
+                                    Background="{ThemeResource BorderSubtleBrush}"/>
+                            <TextBlock x:Name="GpuStatusText"
+                                       Grid.Column="4"
+                                       Text="GPU --"
+                                       VerticalAlignment="Center"
+                                       Style="{StaticResource SecondaryTextStyle}"/>
+                        </Grid>
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal" Spacing="6">
+                    <StackPanel Width="126" Orientation="Horizontal" Spacing="6">
                         <Ellipse Width="8" Height="8" Fill="{ThemeResource AccentPrimaryBrush}"/>
-                        <TextBlock x:Name="ScanStateText" Text="等待扫描" Style="{StaticResource SecondaryTextStyle}"/>
+                        <TextBlock x:Name="ScanStateText"
+                                   Width="108"
+                                   Text="等待扫描"
+                                   TextTrimming="CharacterEllipsis"
+                                   Style="{StaticResource SecondaryTextStyle}"/>
                     </StackPanel>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="10">
@@ -776,7 +1055,87 @@
                     <CompositeTransform x:Name="ViewerTransform"/>
                 </Image.RenderTransform>
             </Image>
-            <Border Background="#99000000" Padding="16,8" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,24" CornerRadius="8">
+            <MediaPlayerElement x:Name="ViewerVideoPlayer"
+                                Visibility="Collapsed"
+                                AreTransportControlsEnabled="False"
+                                AutoPlay="False"
+                                Stretch="Uniform"
+                                Margin="24"/>
+            <Border x:Name="ViewerVideoControls"
+                    Visibility="Collapsed"
+                    Width="760"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Margin="24"
+                    Padding="8"
+                    CornerRadius="6"
+                    Background="#D9181C23"
+                    PointerPressed="ViewerVideoControls_OnPointerPressed"
+                    PointerReleased="ViewerVideoControls_OnPointerReleased">
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="ViewerPlayPauseButton"
+                            Width="34"
+                            Height="34"
+                            MinWidth="34"
+                            MinHeight="34"
+                            Padding="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="ViewerPlayPauseButton_OnClick"
+                            AutomationProperties.Name="播放"
+                            ToolTipService.ToolTip="播放或暂停">
+                        <FontIcon x:Name="ViewerPlayPauseIcon"
+                                  Glyph="&#xE768;"
+                                  FontSize="15"
+                                  Foreground="White"/>
+                    </Button>
+                    <Slider x:Name="ViewerProgressSlider"
+                            Grid.Column="1"
+                            Height="34"
+                            Minimum="0"
+                            Maximum="1"
+                            ValueChanged="ViewerProgressSlider_OnValueChanged"
+                            AutomationProperties.Name="播放进度"/>
+                    <TextBlock x:Name="ViewerVideoTimeText"
+                               Grid.Column="2"
+                               MinWidth="86"
+                               Text="0:00 / 0:00"
+                               FontSize="11"
+                               Foreground="White"
+                               TextAlignment="Right"
+                               VerticalAlignment="Center"/>
+                    <Button x:Name="ViewerMuteButton"
+                            Grid.Column="3"
+                            Width="34"
+                            Height="34"
+                            MinWidth="34"
+                            MinHeight="34"
+                            Padding="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="ViewerMuteButton_OnClick"
+                            AutomationProperties.Name="静音"
+                            ToolTipService.ToolTip="静音或恢复声音">
+                        <FontIcon x:Name="ViewerMuteIcon"
+                                  Glyph="&#xE767;"
+                                  FontSize="15"
+                                  Foreground="White"/>
+                    </Button>
+                </Grid>
+            </Border>
+            <TextBlock x:Name="ViewerVideoErrorText"
+                       Visibility="Collapsed"
+                       Text="无法播放此视频，请检查系统编解码器。"
+                       Foreground="White"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"/>
+            <Border Background="#99000000" Padding="16,8" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,76" CornerRadius="8">
                 <TextBlock x:Name="ViewerCaption" Foreground="White"/>
             </Border>
         </Grid>

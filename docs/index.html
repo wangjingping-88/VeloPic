@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="VeloPic 疾图是一款快速、离线、面向 Windows 10/11 的本地图片浏览与整理工具。">
+  <meta name="description" content="VeloPic 疾图是一款快速、离线、面向 Windows 10/11 的本地图片与视频浏览整理工具。">
   <meta name="theme-color" content="#111821">
-  <title>VeloPic 疾图 | Windows 本地图片查看器</title>
+  <title>VeloPic 疾图 | Windows 本地媒体浏览器</title>
   <link rel="icon" href="assets/app-icon.png" type="image/png">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -32,15 +32,15 @@
     <section class="hero" id="top" aria-labelledby="hero-title">
       <div class="hero-shade" aria-hidden="true"></div>
       <div class="hero-content">
-        <p class="eyebrow">Windows 本地图片工作台</p>
+        <p class="eyebrow">Windows 本地媒体工作台</p>
         <h1 id="hero-title">VeloPic <span>疾图</span></h1>
-        <p class="hero-copy">大目录快速扫描、缩略图按需加载、离线智能分类与壁纸整理，都在一个安静、清晰的界面里完成。</p>
+        <p class="hero-copy">一次扫描图片与视频，平铺或按目录浏览，再完成离线智能分类与壁纸整理。</p>
         <div class="hero-actions">
           <a class="primary-action" href="#workspace">浏览工作台</a>
           <a class="secondary-action" href="https://github.com/wangjingping-88/VeloPic">查看源码</a>
         </div>
         <ul class="hero-facts" aria-label="产品特性">
-          <li><strong>本地优先</strong><span>图片不上传</span></li>
+          <li><strong>本地优先</strong><span>媒体不上传</span></li>
           <li><strong>WinUI 3</strong><span>原生 Windows 体验</span></li>
           <li><strong>ONNX</strong><span>离线智能分类</span></li>
         </ul>
@@ -54,12 +54,13 @@
     <section class="workspace-section" id="workspace" aria-labelledby="workspace-title">
       <div class="section-heading">
         <p class="eyebrow">一套界面，覆盖完整浏览流程</p>
-        <h2 id="workspace-title">把注意力留给图片</h2>
+        <h2 id="workspace-title">把注意力留给内容</h2>
         <p>选择一个能力，查看它在 VeloPic 工作台中的位置。</p>
       </div>
 
       <div class="feature-switcher reveal" role="group" aria-label="工作台功能选择">
         <button type="button" class="feature-tab is-active" data-feature="library" aria-pressed="true">图库浏览</button>
+        <button type="button" class="feature-tab" data-feature="media" aria-pressed="false">图片与视频</button>
         <button type="button" class="feature-tab" data-feature="filter" aria-pressed="false">组合筛选</button>
         <button type="button" class="feature-tab" data-feature="classify" aria-pressed="false">智能分类</button>
         <button type="button" class="feature-tab" data-feature="wallpaper" aria-pressed="false">壁纸整理</button>
@@ -67,7 +68,7 @@
 
       <div class="product-stage reveal" data-feature="library">
         <div class="screen-frame" id="screen-frame">
-          <img src="assets/velopic-interface-current.png" alt="VeloPic 疾图实际运行界面，包含导航栏、缩略图网格和图片详情面板" width="2569" height="1399">
+          <img src="assets/velopic-interface-current.png" alt="VeloPic 疾图实际运行界面，包含图片视频切换、平铺与目录浏览、缩略图网格和详情面板" width="2569" height="1399">
           <div class="scan-line" aria-hidden="true"></div>
           <div class="focus-marker" aria-hidden="true"></div>
         </div>
@@ -75,7 +76,7 @@
           <span class="caption-index">01</span>
           <div>
             <h3 id="feature-title">图库浏览</h3>
-            <p id="feature-description">虚拟化网格按需加载缩略图，拖动滑块即可调整密度，大目录也保持顺畅。</p>
+            <p id="feature-description">虚拟化网格按需加载缩略图，平铺模式全局浏览，按目录模式可逐组折叠。</p>
           </div>
         </div>
       </div>
@@ -90,7 +91,7 @@
         <article class="feature-card reveal">
           <span class="feature-icon" aria-hidden="true">↻</span>
           <h3>递归扫描</h3>
-          <p>主动重新扫描目录，识别 JPG、PNG、WebP、HEIC、AVIF 等常见图片格式。</p>
+          <p>主动重新扫描目录，一次识别常见图片与视频格式，无需重复导入。</p>
         </article>
         <article class="feature-card reveal">
           <span class="feature-icon" aria-hidden="true">⌕</span>
@@ -99,8 +100,8 @@
         </article>
         <article class="feature-card reveal">
           <span class="feature-icon" aria-hidden="true">◎</span>
-          <h3>沉浸查看</h3>
-          <p>方向键和鼠标切换图片，滚轮缩放、拖拽平移，按 Esc 立即回到图库。</p>
+          <h3>沉浸查看与播放</h3>
+          <p>图片支持缩放平移，视频支持原生控制条；方向键切换，按 Esc 返回图库。</p>
         </article>
         <article class="feature-card reveal">
           <span class="feature-icon" aria-hidden="true">▣</span>
@@ -122,9 +123,9 @@
 
     <section class="privacy-section" id="privacy" aria-labelledby="privacy-title">
       <div class="privacy-copy reveal">
-        <p class="eyebrow">图片留在你的电脑里</p>
+        <p class="eyebrow">媒体留在你的电脑里</p>
         <h2 id="privacy-title">整理，不上传</h2>
-        <p>扫描、筛选、收藏、相册和智能分类都在本地完成。VeloPic 保存的是文件路径与整理状态，不创建图片副本，也不依赖云端大模型服务。</p>
+        <p>扫描、筛选、播放、收藏、相册和智能分类都在本地完成。VeloPic 保存的是文件路径与整理状态，不创建媒体副本，也不依赖云端大模型服务。</p>
       </div>
       <div class="local-flow reveal" aria-label="本地处理流程">
         <div><span>01</span><strong>读取目录</strong></div>
@@ -152,7 +153,7 @@
       <img src="assets/app-icon.png" alt="" width="28" height="28">
       <span>VeloPic 疾图</span>
     </a>
-    <p>快速、离线的 Windows 图片查看与整理工具。</p>
+    <p>快速、离线的 Windows 图片与视频浏览整理工具。</p>
     <a href="https://github.com/wangjingping-88/VeloPic">源代码</a>
   </footer>
 

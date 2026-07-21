@@ -26,6 +26,8 @@ public sealed class AppearanceSettings
     public int ThumbnailSize { get; set; } = 190;
 
     public string WallpaperFit { get; set; } = "fill";
+
+    public MediaBrowseMode BrowseMode { get; set; } = MediaBrowseMode.Flat;
 }
 
 public sealed class SortingSettings
@@ -46,6 +48,12 @@ public enum ImageSortDirection
 {
     Ascending,
     Descending
+}
+
+public enum MediaBrowseMode
+{
+    Flat,
+    DirectoryGrouped
 }
 
 public enum VeloPicThemeMode

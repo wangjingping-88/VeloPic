@@ -86,6 +86,7 @@ public sealed partial class MainWindow : Window
 
         var hideDetails = width < CompactWidth;
         var hideSidebar = width < NarrowWidth;
+        var useCompactHeader = width < 1320d;
 
         LeftSidebar.Visibility = hideSidebar ? Visibility.Collapsed : Visibility.Visible;
         DetailPane.Visibility = hideDetails ? Visibility.Collapsed : Visibility.Visible;
@@ -96,10 +97,18 @@ public sealed partial class MainWindow : Window
 
         LeftPaneColumn.Width = hideSidebar ? new GridLength(0) : new GridLength(leftPaneWidth);
         RightPaneColumn.Width = hideDetails ? new GridLength(0) : new GridLength(rightPaneWidth);
-        HeaderBrandColumn.Width = new GridLength(hideSidebar ? 196d : Math.Max(196d, leftPaneWidth - 22d));
+        HeaderBrandColumn.Width = new GridLength(
+            useCompactHeader
+                ? 174d
+                : hideSidebar
+                    ? 196d
+                    : Math.Max(196d, leftPaneWidth - 22d));
+        FilterButton.Width = useCompactHeader ? 100d : 112d;
+        ChooseFolderButton.Width = useCompactHeader ? 104d : 112d;
+        RescanButton.Width = useCompactHeader ? 104d : 112d;
         var headerExpansion = Math.Clamp((width - MinimumWindowWidth) / (1440d - MinimumWindowWidth), 0d, 1d);
-        SortModeGrid.Width = 294d + 32d * headerExpansion;
-        ThemeModeGrid.Width = 286d + 32d * headerExpansion;
+        SortModeGrid.Width = useCompactHeader ? 280d : 294d + 32d * headerExpansion;
+        ThemeModeGrid.Width = useCompactHeader ? 268d : 286d + 32d * headerExpansion;
         HeaderPathBar.Visibility = width >= 1600d ? Visibility.Visible : Visibility.Collapsed;
 
         MainContent.Margin = hideSidebar
@@ -112,6 +121,8 @@ public sealed partial class MainWindow : Window
     private void InitializeControlsFromSettings()
     {
         ThumbnailSlider.Value = _settings.Appearance.ThumbnailSize;
+        GroupedMediaSource.Source = MediaGroups;
+        ApplyBrowseModeSource();
         UpdateSortDirectionButton();
         UpdateWallpaperFitButtons();
     }
@@ -167,6 +178,7 @@ public sealed partial class MainWindow : Window
         UpdateTitleBarColors(actualTheme);
         UpdateThemeModeButtons(mode, actualTheme);
         UpdateSortFieldButtons(_settings.Sorting.Field, actualTheme);
+        UpdateBrowseModeButtons();
     }
 
     private static ElementTheme GetWindowsAppTheme()
@@ -235,10 +247,22 @@ public sealed partial class MainWindow : Window
             DetailContentGrid.MinHeight = e.NewSize.Height;
         }
 
-        var expandableHeight = Math.Max(0d, e.NewSize.Height - 680d);
+        UpdateDetailPreviewFrameHeight(e.NewSize.Height);
+    }
+
+    private void UpdateDetailPreviewFrameHeight(double availableHeight)
+    {
+        if (SelectedImagePreviewFrame is null)
+        {
+            return;
+        }
+
+        const double minimumHeight = 154d;
+        const double maximumHeight = 190d;
+        var expandableHeight = Math.Max(0d, availableHeight - 680d);
         SetElementHeightIfChanged(
             SelectedImagePreviewFrame,
-            Math.Clamp(154d + expandableHeight * 0.18d, 154d, 190d));
+            Math.Clamp(minimumHeight + expandableHeight * 0.18d, minimumHeight, maximumHeight));
     }
 
     private static void SetElementHeightIfChanged(FrameworkElement element, double height)
@@ -261,8 +285,8 @@ public sealed partial class MainWindow : Window
             ? new SolidColorBrush(ColorHelper.FromArgb(255, 60, 141, 255))
             : new SolidColorBrush(ColorHelper.FromArgb(255, 36, 111, 229));
         var normalBorder = actualTheme == ElementTheme.Dark
-            ? new SolidColorBrush(ColorHelper.FromArgb(255, 53, 66, 85))
-            : new SolidColorBrush(ColorHelper.FromArgb(255, 198, 210, 224));
+            ? new SolidColorBrush(ColorHelper.FromArgb(255, 83, 101, 126))
+            : new SolidColorBrush(ColorHelper.FromArgb(255, 156, 173, 193));
 
         foreach (var button in new[] { ModifiedTimeSortButton, FileNameSortButton, FileSizeSortButton })
         {

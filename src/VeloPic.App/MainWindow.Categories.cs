@@ -267,8 +267,9 @@ public sealed partial class MainWindow : Window
         }
 
         var selectedItems = ImageGridView.SelectedItems
-            .OfType<ImageTileViewModel>()
-            .Select(item => item.Record)
+            .OfType<MediaTileViewModel>()
+            .Where(item => item.Record.Kind == MediaKind.Image)
+            .Select(item => item.Record.AsImageRecord())
             .ToList();
         var targets = selectedItems.Count > 0 ? selectedItems : _filteredImages.ToList();
         if (targets.Count == 0)
