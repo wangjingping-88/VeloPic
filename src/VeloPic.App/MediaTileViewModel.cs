@@ -12,13 +12,14 @@ public sealed class MediaTileViewModel : INotifyPropertyChanged
     private double _thumbnailWidth;
     private double _thumbnailHeight;
     private ImageSource? _thumbnail;
+    private string _favoriteMark;
 
     public MediaTileViewModel(MediaRecord record, int thumbnailSize, bool isFavorite)
     {
         Record = record;
         FileName = record.FileName;
         FullPath = record.FullPath;
-        FavoriteMark = isFavorite && record.Kind == MediaKind.Image ? "★" : string.Empty;
+        _favoriteMark = GetFavoriteMark(record, isFavorite);
         if (record.Kind == MediaKind.Image)
         {
             _thumbnail = new BitmapImage
@@ -39,7 +40,7 @@ public sealed class MediaTileViewModel : INotifyPropertyChanged
 
     public string FullPath { get; }
 
-    public string FavoriteMark { get; }
+    public string FavoriteMark => _favoriteMark;
 
     public string SizeText => Record.SizeBytes switch
     {
@@ -113,6 +114,21 @@ public sealed class MediaTileViewModel : INotifyPropertyChanged
     }
 
     public void SetThumbnail(ImageSource? thumbnail) => Thumbnail = thumbnail;
+
+    public void SetFavorite(bool isFavorite)
+    {
+        var favoriteMark = GetFavoriteMark(Record, isFavorite);
+        if (string.Equals(_favoriteMark, favoriteMark, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _favoriteMark = favoriteMark;
+        OnPropertyChanged(nameof(FavoriteMark));
+    }
+
+    private static string GetFavoriteMark(MediaRecord record, bool isFavorite) =>
+        isFavorite && record.Kind == MediaKind.Image ? "\u2605" : string.Empty;
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
     {

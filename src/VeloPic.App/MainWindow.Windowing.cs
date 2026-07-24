@@ -109,7 +109,7 @@ public sealed partial class MainWindow : Window
         var headerExpansion = Math.Clamp((width - MinimumWindowWidth) / (1440d - MinimumWindowWidth), 0d, 1d);
         SortModeGrid.Width = useCompactHeader ? 280d : 294d + 32d * headerExpansion;
         ThemeModeGrid.Width = useCompactHeader ? 268d : 286d + 32d * headerExpansion;
-        HeaderPathBar.Visibility = width >= 1600d ? Visibility.Visible : Visibility.Collapsed;
+        HeaderPathBar.Visibility = width >= 1540d ? Visibility.Visible : Visibility.Collapsed;
 
         MainContent.Margin = hideSidebar
             ? new Thickness(8, 8, 8, 8)
@@ -276,8 +276,8 @@ public sealed partial class MainWindow : Window
     private void UpdateSortFieldButtons(ImageSortField sortField, ElementTheme actualTheme)
     {
         var selectedBackground = actualTheme == ElementTheme.Dark
-            ? new SolidColorBrush(ColorHelper.FromArgb(255, 25, 63, 125))
-            : new SolidColorBrush(ColorHelper.FromArgb(255, 220, 234, 255));
+            ? new SolidColorBrush(ColorHelper.FromArgb(255, 54, 139, 255))
+            : new SolidColorBrush(ColorHelper.FromArgb(255, 36, 111, 229));
         var normalBackground = actualTheme == ElementTheme.Dark
             ? new SolidColorBrush(ColorHelper.FromArgb(255, 27, 36, 49))
             : new SolidColorBrush(ColorHelper.FromArgb(255, 255, 255, 255));
@@ -294,6 +294,14 @@ public sealed partial class MainWindow : Window
             button.Background = selected ? selectedBackground : normalBackground;
             button.BorderBrush = selected ? selectedBorder : normalBorder;
             button.BorderThickness = new Thickness(1);
+            if (selected)
+            {
+                button.Foreground = new SolidColorBrush(Colors.White);
+            }
+            else
+            {
+                button.ClearValue(Control.ForegroundProperty);
+            }
             AutomationProperties.SetName(button, $"按{button.Content}排序{(selected ? "，当前已选" : string.Empty)}");
         }
     }

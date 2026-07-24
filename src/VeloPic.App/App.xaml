@@ -27,6 +27,8 @@
                     <SolidColorBrush x:Key="AccentPrimaryBrush" Color="#368BFF"/>
                     <SolidColorBrush x:Key="AccentHoverBrush" Color="#3C8DFF"/>
                     <SolidColorBrush x:Key="AccentSoftBrush" Color="#193F7D"/>
+                    <SolidColorBrush x:Key="SelectionBackgroundBrush" Color="#368BFF"/>
+                    <SolidColorBrush x:Key="SelectionForegroundBrush" Color="#FFFFFF"/>
                     <SolidColorBrush x:Key="SuccessBrush" Color="#48D06D"/>
                     <SolidColorBrush x:Key="WarningBrush" Color="#FFD45C"/>
                     <SolidColorBrush x:Key="ButtonBackground" Color="#263141"/>
@@ -40,6 +42,12 @@
                     <SolidColorBrush x:Key="ToggleButtonBorderBrushPointerOver" Color="#6A7D98"/>
                     <SolidColorBrush x:Key="ToggleButtonBorderBrushPressed" Color="#7F93AE"/>
                     <SolidColorBrush x:Key="ToggleButtonBorderBrushChecked" Color="#368BFF"/>
+                    <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#368BFF"/>
+                    <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="#3C8DFF"/>
+                    <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="#2B76DA"/>
+                    <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#FFFFFF"/>
+                    <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#FFFFFF"/>
+                    <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#FFFFFF"/>
                     <SolidColorBrush x:Key="TextControlBackground" Color="#1B2431"/>
                     <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#202B3A"/>
                     <SolidColorBrush x:Key="TextControlForeground" Color="#EEF3FA"/>
@@ -69,6 +77,8 @@
                     <SolidColorBrush x:Key="AccentPrimaryBrush" Color="#246FE5"/>
                     <SolidColorBrush x:Key="AccentHoverBrush" Color="#155FCC"/>
                     <SolidColorBrush x:Key="AccentSoftBrush" Color="#DCEAFF"/>
+                    <SolidColorBrush x:Key="SelectionBackgroundBrush" Color="#246FE5"/>
+                    <SolidColorBrush x:Key="SelectionForegroundBrush" Color="#FFFFFF"/>
                     <SolidColorBrush x:Key="SuccessBrush" Color="#22A654"/>
                     <SolidColorBrush x:Key="WarningBrush" Color="#D79518"/>
                     <SolidColorBrush x:Key="ButtonBackground" Color="#E6ECF3"/>
@@ -82,6 +92,12 @@
                     <SolidColorBrush x:Key="ToggleButtonBorderBrushPointerOver" Color="#7F95AD"/>
                     <SolidColorBrush x:Key="ToggleButtonBorderBrushPressed" Color="#6B839D"/>
                     <SolidColorBrush x:Key="ToggleButtonBorderBrushChecked" Color="#246FE5"/>
+                    <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#246FE5"/>
+                    <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="#155FCC"/>
+                    <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="#1055B8"/>
+                    <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#FFFFFF"/>
+                    <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#FFFFFF"/>
+                    <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#FFFFFF"/>
                     <SolidColorBrush x:Key="TextControlBackground" Color="#FFFFFF"/>
                     <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#F7FAFD"/>
                     <SolidColorBrush x:Key="TextControlForeground" Color="#182233"/>
@@ -172,6 +188,90 @@
                 <Setter Property="FontFamily" Value="Segoe UI Variable Text, Microsoft YaHei UI, Segoe UI"/>
             </Style>
 
+            <Style x:Key="CategoryActionButtonStyle"
+                   TargetType="Button"
+                   BasedOn="{StaticResource QuietActionButtonStyle}">
+                <Setter Property="MinWidth" Value="0"/>
+                <Setter Property="MinHeight" Value="30"/>
+                <Setter Property="Padding" Value="4,0"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderBrush" Value="{ThemeResource InteractiveBorderBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="CornerRadius" Value="4"/>
+                <Setter Property="HorizontalAlignment" Value="Stretch"/>
+                <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
+            </Style>
+
+            <ControlTemplate x:Key="SelectionButtonTemplate" TargetType="Button">
+                <Border x:Name="RootBorder"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{TemplateBinding CornerRadius}">
+                    <VisualStateManager.VisualStateGroups>
+                        <VisualStateGroup x:Name="CommonStates">
+                            <VisualState x:Name="Normal"/>
+                            <VisualState x:Name="PointerOver"/>
+                            <VisualState x:Name="Pressed">
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="RootBorder"
+                                                     Storyboard.TargetProperty="Opacity"
+                                                     To="0.82"
+                                                     Duration="0"/>
+                                </Storyboard>
+                            </VisualState>
+                            <VisualState x:Name="Disabled">
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="RootBorder"
+                                                     Storyboard.TargetProperty="Opacity"
+                                                     To="0.45"
+                                                     Duration="0"/>
+                                </Storyboard>
+                            </VisualState>
+                        </VisualStateGroup>
+                    </VisualStateManager.VisualStateGroups>
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      Padding="{TemplateBinding Padding}"
+                                      HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                      Foreground="{TemplateBinding Foreground}"/>
+                </Border>
+            </ControlTemplate>
+
+            <Style x:Key="NavigationItemButtonStyle" TargetType="Button">
+                <Setter Property="Template" Value="{StaticResource SelectionButtonTemplate}"/>
+                <Setter Property="MinWidth" Value="0"/>
+                <Setter Property="MinHeight" Value="36"/>
+                <Setter Property="Padding" Value="9,0"/>
+                <Setter Property="CornerRadius" Value="6"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderBrush" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="HorizontalAlignment" Value="Stretch"/>
+                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                <Setter Property="FontSize" Value="12"/>
+                <Setter Property="FontFamily" Value="Segoe UI Variable Text, Microsoft YaHei UI, Segoe UI"/>
+            </Style>
+
+            <Style x:Key="CategoryItemButtonStyle" TargetType="Button">
+                <Setter Property="Template" Value="{StaticResource SelectionButtonTemplate}"/>
+                <Setter Property="MinWidth" Value="0"/>
+                <Setter Property="MinHeight" Value="28"/>
+                <Setter Property="Padding" Value="4,0"/>
+                <Setter Property="CornerRadius" Value="4"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderBrush" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="HorizontalAlignment" Value="Stretch"/>
+                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                <Setter Property="FontSize" Value="12"/>
+                <Setter Property="FontFamily" Value="Segoe UI Variable Text, Microsoft YaHei UI, Segoe UI"/>
+            </Style>
+
             <Style x:Key="IconTileButtonStyle" TargetType="Button" BasedOn="{StaticResource CompactButtonStyle}">
                 <Setter Property="MinHeight" Value="48"/>
                 <Setter Property="Padding" Value="6"/>
@@ -179,9 +279,9 @@
             </Style>
 
             <Style x:Key="QuickActionButtonStyle" TargetType="Button" BasedOn="{StaticResource CompactButtonStyle}">
-                <Setter Property="MinHeight" Value="46"/>
+                <Setter Property="MinHeight" Value="48"/>
                 <Setter Property="Padding" Value="3"/>
-                <Setter Property="FontSize" Value="11"/>
+                <Setter Property="FontSize" Value="12"/>
                 <Setter Property="BorderBrush" Value="{ThemeResource ActionButtonBorderBrush}"/>
                 <Setter Property="BorderThickness" Value="1"/>
                 <Setter Property="HorizontalAlignment" Value="Stretch"/>
@@ -190,7 +290,7 @@
             <Style x:Key="DetailBarButtonStyle" TargetType="Button" BasedOn="{StaticResource CompactButtonStyle}">
                 <Setter Property="MinHeight" Value="30"/>
                 <Setter Property="Padding" Value="4,3"/>
-                <Setter Property="FontSize" Value="11"/>
+                <Setter Property="FontSize" Value="12"/>
                 <Setter Property="CornerRadius" Value="5"/>
                 <Setter Property="BorderBrush" Value="{ThemeResource ActionButtonBorderBrush}"/>
                 <Setter Property="BorderThickness" Value="1"/>
@@ -202,7 +302,7 @@
                 <Setter Property="MinWidth" Value="0"/>
                 <Setter Property="MinHeight" Value="48"/>
                 <Setter Property="Padding" Value="3"/>
-                <Setter Property="FontSize" Value="11"/>
+                <Setter Property="FontSize" Value="12"/>
                 <Setter Property="CornerRadius" Value="4"/>
                 <Setter Property="FontFamily" Value="Segoe UI Variable Text, Microsoft YaHei UI, Segoe UI"/>
                 <Setter Property="BorderBrush" Value="{ThemeResource ActionButtonBorderBrush}"/>
@@ -217,13 +317,15 @@
                 <Setter Property="FontFamily" Value="Segoe UI Variable Text, Microsoft YaHei UI, Segoe UI"/>
             </Style>
 
-            <Style TargetType="TextBox">
+            <Style x:Key="SingleLineTextBoxStyle" TargetType="TextBox">
                 <Setter Property="FontSize" Value="12"/>
                 <Setter Property="FontFamily" Value="Segoe UI Variable Text, Microsoft YaHei UI, Segoe UI"/>
                 <Setter Property="MinHeight" Value="36"/>
-                <Setter Property="Padding" Value="10,7,10,4"/>
+                <Setter Property="Padding" Value="10,8,10,0"/>
                 <Setter Property="VerticalContentAlignment" Value="Center"/>
             </Style>
+
+            <Style TargetType="TextBox" BasedOn="{StaticResource SingleLineTextBoxStyle}"/>
 
             <Style TargetType="ComboBox">
                 <Setter Property="FontSize" Value="12"/>
@@ -232,7 +334,7 @@
 
             <Style x:Key="SecondaryTextStyle" TargetType="TextBlock">
                 <Setter Property="Foreground" Value="{ThemeResource TextSecondaryBrush}"/>
-                <Setter Property="FontSize" Value="11"/>
+                <Setter Property="FontSize" Value="12"/>
             </Style>
 
             <Style x:Key="SectionLabelStyle" TargetType="TextBlock">

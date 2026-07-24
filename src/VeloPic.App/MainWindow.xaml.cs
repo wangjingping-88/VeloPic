@@ -71,6 +71,7 @@ public sealed partial class MainWindow : Window
         _currentFolder = _settings.LastFolder;
 
         InitializeComponent();
+        InitializeSelectionButtonInteractions();
         RebuildCategoryControls();
         RebuildAlbumNavigation();
         _metricsTimer = DispatcherQueue.CreateTimer();
@@ -211,6 +212,7 @@ public sealed partial class MainWindow : Window
             UpdateFileTypeFilterOptions();
             StartResolutionMetadataLoad(_allImages);
             ApplyFilterAndSort();
+            UpdateSmartClassificationButtonState();
             var videoCount = records.Count(record => record.Kind == MediaKind.Video);
             StatusText.Text = $"扫描完成：{_allImages.Count:N0} 张图片，{videoCount:N0} 个视频";
             ScanStateText.Text = "扫描已完成";
@@ -292,6 +294,7 @@ public sealed partial class MainWindow : Window
         _imageDimensions.Clear();
         _isResolutionMetadataReady = records.Count == 0;
         ResolutionFilterBox.IsEnabled = false;
+        OrientationFilterBox.IsEnabled = false;
         FilterMetadataStatusText.Text = records.Count == 0
             ? "当前没有可读取的图片"
             : $"正在读取分辨率：0 / {records.Count:N0}";
@@ -352,8 +355,10 @@ public sealed partial class MainWindow : Window
 
             _isResolutionMetadataReady = true;
             ResolutionFilterBox.IsEnabled = _imageDimensions.Count > 0;
+            OrientationFilterBox.IsEnabled = _imageDimensions.Count > 0;
             FilterMetadataStatusText.Text = $"分辨率已读取：{_imageDimensions.Count:N0} / {records.Count:N0}";
-            if (GetSelectedResolutionLevel() != ImageResolutionLevel.All)
+            if (GetSelectedResolutionLevel() != ImageResolutionLevel.All ||
+                GetSelectedOrientation() != ImageOrientation.All)
             {
                 ApplyFilterAndSort();
             }
@@ -394,6 +399,7 @@ public sealed partial class MainWindow : Window
         _suppressFilterChanges = true;
         FilterNameBox.Text = string.Empty;
         ResolutionFilterBox.SelectedIndex = 0;
+        OrientationFilterBox.SelectedIndex = 0;
         FileTypeFilterBox.SelectedIndex = 0;
         _suppressFilterChanges = false;
         UpdateFilterButtonState();
@@ -410,6 +416,11 @@ public sealed partial class MainWindow : Window
         }
 
         if (ResolutionFilterBox.SelectedIndex > 0)
+        {
+            activeCount++;
+        }
+
+        if (OrientationFilterBox.SelectedIndex > 0)
         {
             activeCount++;
         }
@@ -530,11 +541,11 @@ public sealed partial class MainWindow : Window
         }
 
         var resolutionLevel = GetSelectedResolutionLevel();
+        var orientation = GetSelectedOrientation();
         var fileType = GetSelectedFilterTag(FileTypeFilterBox);
         var collectionFilter = _activeMediaKind == MediaKind.Image ? _activeNavigationFilter switch
         {
             "favorites" => ImageCollectionFilter.Favorites,
-            "tags" => ImageCollectionFilter.Tagged,
             "albums" => ImageCollectionFilter.Album,
             "wallpaper" => ImageCollectionFilter.WallpaperFavorites,
             _ => ImageCollectionFilter.All
@@ -551,6 +562,9 @@ public sealed partial class MainWindow : Window
             Resolution = _activeMediaKind == MediaKind.Image && _isResolutionMetadataReady
                 ? resolutionLevel
                 : ImageResolutionLevel.All,
+            Orientation = _activeMediaKind == MediaKind.Image && _isResolutionMetadataReady
+                ? orientation
+                : ImageOrientation.All,
             FileExtension = fileType,
             Category = _activeMediaKind == MediaKind.Image ? _activeCategory : null,
             Collection = collectionFilter,
@@ -881,8 +895,10 @@ public sealed partial class MainWindow : Window
 
         _suppressFilterChanges = true;
         ResolutionFilterBox.SelectedIndex = 0;
+        OrientationFilterBox.SelectedIndex = 0;
         _suppressFilterChanges = false;
         ResolutionFilterBox.IsEnabled = kind == MediaKind.Image && _isResolutionMetadataReady && _imageDimensions.Count > 0;
+        OrientationFilterBox.IsEnabled = kind == MediaKind.Image && _isResolutionMetadataReady && _imageDimensions.Count > 0;
         UpdateImageOnlyNavigationState();
         UpdateSelectionActionState(false, false);
         _ = UpdateSelectionDetails(null);
@@ -912,7 +928,6 @@ public sealed partial class MainWindow : Window
                  {
                      FavoritesNavigationItem,
                      AlbumsNavigationItem,
-                     TagsNavigationItem,
                      WallpaperNavigationItem,
                      ManualClassificationButton,
                      SmartClassificationButton,
@@ -933,6 +948,16 @@ public sealed partial class MainWindow : Window
             "2k" => ImageResolutionLevel.TwoK,
             "1k" => ImageResolutionLevel.OneK,
             _ => ImageResolutionLevel.All
+        };
+    }
+
+    private ImageOrientation GetSelectedOrientation()
+    {
+        return GetSelectedFilterTag(OrientationFilterBox) switch
+        {
+            "landscape" => ImageOrientation.Landscape,
+            "portrait" => ImageOrientation.Portrait,
+            _ => ImageOrientation.All
         };
     }
 
@@ -993,56 +1018,12 @@ public sealed partial class MainWindow : Window
         var totalCount = _allMedia.Count(record => record.Kind == _activeMediaKind);
         var unit = _activeMediaKind == MediaKind.Image ? "张图片" : "个视频";
         FolderStatsText.Text = $"{totalCount:N0} {unit}";
-        UpdateStorageStatus();
-        GalleryTitle.Text = string.IsNullOrWhiteSpace(_activeCategory)
-            ? $"{GetNavigationTitle()}  {_filteredMedia.Count:N0} {unit}"
-            : $"{_activeCategory}  {_filteredMedia.Count:N0} {unit}";
         ScanProgressText.Text = $"显示：{Images.Count:N0} / {_filteredMedia.Count:N0}";
         CacheStatusText.Text = _filteredMedia.Count > MaxInitialTiles
             ? $"已虚拟化加载前 {MaxInitialTiles:N0} 个，筛选可缩小范围"
             : "缩略图按需加载";
         UpdateCategoryCounts();
         UpdateCollectionActionLabels();
-    }
-
-    private void UpdateStorageStatus()
-    {
-        if (string.IsNullOrWhiteSpace(_currentFolder))
-        {
-            StorageDriveText.Text = "等待选择目录";
-            StorageStatsText.Text = "选择文件夹后显示磁盘容量";
-            StorageUsageBar.Value = 0;
-            return;
-        }
-
-        try
-        {
-            var root = Path.GetPathRoot(_currentFolder);
-            if (string.IsNullOrWhiteSpace(root))
-            {
-                return;
-            }
-
-            var drive = new DriveInfo(root);
-            var usedBytes = Math.Max(0L, drive.TotalSize - drive.AvailableFreeSpace);
-            var usagePercent = drive.TotalSize > 0 ? usedBytes * 100d / drive.TotalSize : 0d;
-            StorageDriveText.Text = $"{drive.Name.TrimEnd('\\')}  {drive.VolumeLabel}".Trim();
-            StorageStatsText.Text = $"可用 {FormatStorageSize(drive.AvailableFreeSpace)}，共 {FormatStorageSize(drive.TotalSize)}";
-            StorageUsageBar.Value = Math.Clamp(usagePercent, 0d, 100d);
-        }
-        catch (Exception)
-        {
-            StorageDriveText.Text = Path.GetPathRoot(_currentFolder) ?? "当前磁盘";
-            StorageStatsText.Text = "暂时无法读取磁盘容量";
-            StorageUsageBar.Value = 0;
-        }
-    }
-
-    private static string FormatStorageSize(long bytes)
-    {
-        const double gib = 1024d * 1024d * 1024d;
-        const double tib = gib * 1024d;
-        return bytes >= tib ? $"{bytes / tib:0.##} TB" : $"{bytes / gib:0.#} GB";
     }
 
     private string GetNavigationTitle()
@@ -1052,7 +1033,6 @@ public sealed partial class MainWindow : Window
             "favorites" => "收藏",
             "recent" => "最近",
             "albums" => string.IsNullOrWhiteSpace(_activeAlbum) ? "相册" : _activeAlbum,
-            "tags" => "标签",
             "wallpaper" => "壁纸收藏夹",
             _ => "当前目录"
         };

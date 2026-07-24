@@ -9,16 +9,22 @@ var tests = new List<(string Name, Action Run)>
     ("非递归扫描只返回根目录图片文件", ImageFileScannerTests.EnumeratesImagesWithoutRecursion),
     ("主题解析符合跟随系统和手动模式", ThemeResolverTests.ResolvesThemeModes),
     ("常用分辨率筛选兼容横图和竖图", ImageResolutionFilterTests.MatchesCommonResolutionLevels),
+    ("画面方向筛选区分横屏竖屏和方形", ImageOrientationFilterTests.MatchesLandscapeAndPortrait),
     ("设置文件可以往返保存", SettingsStoreTests.RoundTripsSettings),
+    ("旧版单标签设置可以迁移", SettingsStoreTests.LoadsLegacySingleCategory),
     ("旧设置默认使用平铺浏览模式", SettingsStoreTests.UsesFlatBrowseModeForLegacySettings),
     ("收藏和相册删除结果可以持久化", SettingsStoreTests.RoundTripsCollectionRemoval),
     ("设置保存使用原子替换", SettingsStoreTests.ReplacesSettingsAtomically),
     ("图片扫描支持取消", ImageFileScannerTests.HonorsCancellation),
     ("图库查询组合筛选和排序正确", ImageLibraryQueryServiceTests.FiltersAndSorts),
+    ("同一图片可出现在多个标签筛选中", ImageLibraryQueryServiceTests.SupportsMultipleCategories),
     ("集合服务同步收藏和相册设置", ImageCollectionServiceTests.SynchronizesSettings),
+    ("集合服务支持批量移除单个标签", ImageCollectionServiceTests.RemovesCategoryFromMultipleImages),
     ("查看器导航支持首尾循环", ImageViewerNavigatorTests.WrapsAround),
     ("媒体扫描识别图片和常见视频格式", MediaFileScannerTests.SupportsAndScansMedia),
     ("媒体查询按类型筛选并在目录内排序", MediaLibraryQueryServiceTests.FiltersByKindAndSorts),
+    ("媒体查询支持横竖屏筛选", MediaLibraryQueryServiceTests.FiltersByOrientation),
+    ("媒体查询支持图片多标签", MediaLibraryQueryServiceTests.SupportsMultipleCategories),
     ("目录分组生成完整相对路径标题", MediaDirectoryGroupingTests.BuildsRelativeDirectoryTitles),
     ("媒体查看导航支持首尾循环", MediaViewerNavigatorTests.WrapsAround),
     ("分片 MP4 可以读取真实视频时长", Mp4DurationReaderTests.ReadsFragmentTimelineDuration)
@@ -152,6 +158,20 @@ static class ImageResolutionFilterTests
     }
 }
 
+static class ImageOrientationFilterTests
+{
+    public static void MatchesLandscapeAndPortrait()
+    {
+        AssertEx.True(ImageOrientationFilter.Matches(1920, 1080, ImageOrientation.Landscape), "宽图应匹配横屏");
+        AssertEx.True(!ImageOrientationFilter.Matches(1080, 1920, ImageOrientation.Landscape), "竖图不应匹配横屏");
+        AssertEx.True(ImageOrientationFilter.Matches(1080, 1920, ImageOrientation.Portrait), "高图应匹配竖屏");
+        AssertEx.True(!ImageOrientationFilter.Matches(1920, 1080, ImageOrientation.Portrait), "横图不应匹配竖屏");
+        AssertEx.True(!ImageOrientationFilter.Matches(1024, 1024, ImageOrientation.Landscape), "方形图片不应归为横屏");
+        AssertEx.True(!ImageOrientationFilter.Matches(1024, 1024, ImageOrientation.Portrait), "方形图片不应归为竖屏");
+        AssertEx.True(ImageOrientationFilter.Matches(1024, 1024, ImageOrientation.All), "全部方向应保留方形图片");
+    }
+}
+
 static class SettingsStoreTests
 {
     public static void RoundTripsSettings()
@@ -176,7 +196,7 @@ static class SettingsStoreTests
             Favorites = ["a.jpg", "b.png"],
             CustomCategories = ["建筑", "夜景"]
         };
-        settings.Categories["a.jpg"] = "风景";
+        settings.Categories["a.jpg"] = ["风景", "旅行"];
 
         SettingsStore.Save(path, settings);
         var loaded = SettingsStore.Load(path);
@@ -191,7 +211,27 @@ static class SettingsStoreTests
         AssertEx.Equal(2, loaded.Favorites.Count, "应保存收藏列表");
         AssertEx.Equal(2, loaded.CustomCategories.Count, "应保存自定义标签");
         AssertEx.Equal("建筑", loaded.CustomCategories[0], "应保留自定义标签名称");
-        AssertEx.Equal("风景", loaded.Categories["a.jpg"], "应保存手动分类");
+        AssertEx.Equal(2, loaded.Categories["a.jpg"].Count, "应保存多个手动标签");
+        AssertEx.True(loaded.Categories["a.jpg"].Contains("风景"), "应保存第一个标签");
+        AssertEx.True(loaded.Categories["a.jpg"].Contains("旅行"), "应保存第二个标签");
+    }
+
+    public static void LoadsLegacySingleCategory()
+    {
+        using var root = TempDirectory.Create();
+        var path = Path.Combine(root.Path, "settings.json");
+        File.WriteAllText(path, """
+        {
+          "categories": {
+            "a.jpg": "风景"
+          }
+        }
+        """);
+
+        var loaded = SettingsStore.Load(path);
+
+        AssertEx.Equal(1, loaded.Categories["a.jpg"].Count, "旧版字符串标签应迁移为单元素列表");
+        AssertEx.Equal("风景", loaded.Categories["a.jpg"][0], "迁移后应保留标签名称");
     }
 
     public static void UsesFlatBrowseModeForLegacySettings()
@@ -262,10 +302,10 @@ static class ImageLibraryQueryServiceTests
         {
             FileExtension = ".jpg",
             Category = "风景",
-            Categories = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            Categories = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
             {
-                [first.FullPath] = "风景",
-                [second.FullPath] = "城市"
+                [first.FullPath] = ["风景", "旅行"],
+                [second.FullPath] = ["城市"]
             },
             SortField = ImageSortField.FileSize,
             SortDirection = ImageSortDirection.Ascending
@@ -273,6 +313,30 @@ static class ImageLibraryQueryServiceTests
 
         AssertEx.Equal(1, result.Count, "组合筛选应只保留匹配图片");
         AssertEx.Equal(first.FullPath, result[0].FullPath, "筛选结果应为风景 JPG");
+    }
+
+    public static void SupportsMultipleCategories()
+    {
+        var image = new ImageRecord("C:\\images\\trip.jpg", "trip.jpg", "C:\\images", 100, DateTimeOffset.Now);
+        var categories = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
+        {
+            [image.FullPath] = ["风景", "旅行"]
+        };
+        var service = new ImageLibraryQueryService();
+
+        var landscapes = service.Query([image], new ImageQueryOptions
+        {
+            Category = "风景",
+            Categories = categories
+        });
+        var trips = service.Query([image], new ImageQueryOptions
+        {
+            Category = "旅行",
+            Categories = categories
+        });
+
+        AssertEx.Equal(1, landscapes.Count, "图片应出现在第一个标签页");
+        AssertEx.Equal(1, trips.Count, "图片应同时出现在第二个标签页");
     }
 }
 
@@ -291,6 +355,27 @@ static class ImageCollectionServiceTests
         AssertEx.True(settings.WallpaperFavorites.Contains("a.jpg"), "壁纸收藏应写回设置");
         AssertEx.Equal(1, removal.RemovedCount, "应从相册移除一张图片");
         AssertEx.Equal("b.jpg", settings.Albums["旅行"][0], "相册应保留未移除图片");
+    }
+
+    public static void RemovesCategoryFromMultipleImages()
+    {
+        var settings = new AppSettings
+        {
+            Categories = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["a.jpg"] = ["风景", "旅行"],
+                ["b.jpg"] = ["风景"],
+                ["c.jpg"] = ["人物"]
+            }
+        };
+        var service = new ImageCollectionService(settings);
+
+        var removedCount = service.RemoveCategory(["a.jpg", "b.jpg", "c.jpg"], "风景");
+
+        AssertEx.Equal(2, removedCount, "应从两张带目标标签的图片中移除标签");
+        AssertEx.Equal("旅行", settings.Categories["a.jpg"][0], "应保留图片的其他标签");
+        AssertEx.True(!settings.Categories.ContainsKey("b.jpg"), "移除最后一个标签后应删除空标签记录");
+        AssertEx.Equal("人物", settings.Categories["c.jpg"][0], "不含目标标签的图片不应变化");
     }
 }
 
@@ -359,6 +444,55 @@ static class MediaLibraryQueryServiceTests
         AssertEx.Equal(2, result.Count, "视频标签应只返回视频");
         AssertEx.Equal(smallVideo, result[0], "组内应按文件大小升序排列");
         AssertEx.Equal(largeVideo, result[1], "较大视频应排在后面");
+    }
+
+    public static void FiltersByOrientation()
+    {
+        var landscape = new MediaRecord("C:\\library\\landscape.jpg", "landscape.jpg", "C:\\library", 50, DateTimeOffset.MinValue, MediaKind.Image);
+        var portrait = new MediaRecord("C:\\library\\portrait.jpg", "portrait.jpg", "C:\\library", 50, DateTimeOffset.MinValue, MediaKind.Image);
+        var square = new MediaRecord("C:\\library\\square.jpg", "square.jpg", "C:\\library", 50, DateTimeOffset.MinValue, MediaKind.Image);
+        var dimensions = new Dictionary<string, ImageDimensions>(StringComparer.OrdinalIgnoreCase)
+        {
+            [landscape.FullPath] = new ImageDimensions(1920, 1080),
+            [portrait.FullPath] = new ImageDimensions(1080, 1920),
+            [square.FullPath] = new ImageDimensions(1024, 1024)
+        };
+
+        var result = new MediaLibraryQueryService().Query([landscape, portrait, square], new MediaQueryOptions
+        {
+            Kind = MediaKind.Image,
+            Orientation = ImageOrientation.Portrait,
+            Dimensions = dimensions
+        });
+
+        AssertEx.Equal(1, result.Count, "竖屏筛选应只保留高度大于宽度的图片");
+        AssertEx.Equal(portrait, result[0], "竖屏筛选结果不正确");
+    }
+
+    public static void SupportsMultipleCategories()
+    {
+        var image = new MediaRecord("C:\\library\\cover.jpg", "cover.jpg", "C:\\library", 50, DateTimeOffset.MinValue, MediaKind.Image);
+        var categories = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
+        {
+            [image.FullPath] = ["风景", "旅行"]
+        };
+        var service = new MediaLibraryQueryService();
+
+        var landscape = service.Query([image], new MediaQueryOptions
+        {
+            Kind = MediaKind.Image,
+            Category = "风景",
+            Categories = categories
+        });
+        var travel = service.Query([image], new MediaQueryOptions
+        {
+            Kind = MediaKind.Image,
+            Category = "旅行",
+            Categories = categories
+        });
+
+        AssertEx.Equal(1, landscape.Count, "图片应出现在第一个标签页面");
+        AssertEx.Equal(1, travel.Count, "图片应同时出现在第二个标签页面");
     }
 }
 

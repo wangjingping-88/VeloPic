@@ -68,6 +68,38 @@ public sealed class ImageCollectionService
         return new AlbumRemovalResult(previousCount - albumPaths.Count, albumDeleted);
     }
 
+    public int RemoveCategory(IEnumerable<string> paths, string category)
+    {
+        if (string.IsNullOrWhiteSpace(category))
+        {
+            return 0;
+        }
+
+        var removedCount = 0;
+        foreach (var path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!_settings.Categories.TryGetValue(path, out var categories))
+            {
+                continue;
+            }
+
+            var removed = categories.RemoveAll(item =>
+                string.Equals(item, category, StringComparison.OrdinalIgnoreCase));
+            if (removed == 0)
+            {
+                continue;
+            }
+
+            removedCount++;
+            if (categories.Count == 0)
+            {
+                _settings.Categories.Remove(path);
+            }
+        }
+
+        return removedCount;
+    }
+
     public void RemovePath(string path)
     {
         _favorites.Remove(path);

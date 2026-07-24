@@ -103,6 +103,31 @@ public sealed partial class MainWindow : Window
         }
 
         menu.Items.Add(categoryMenu);
+        var removableCategories = records
+            .SelectMany(record => _settings.Categories.TryGetValue(record.FullPath, out var categories)
+                ? categories
+                : [])
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(category => category, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+        var removeCategoryMenu = new MenuFlyoutSubItem
+        {
+            Text = "移除标签",
+            Icon = new FontIcon { Glyph = "\uE711" },
+            IsEnabled = removableCategories.Count > 0
+        };
+        foreach (var category in removableCategories)
+        {
+            var categoryItem = new MenuFlyoutItem
+            {
+                Text = category,
+                Tag = category
+            };
+            categoryItem.Click += RemoveCategoryMenuItem_OnClick;
+            removeCategoryMenu.Items.Add(categoryItem);
+        }
+
+        menu.Items.Add(removeCategoryMenu);
         menu.Items.Add(CreateImageContextMenuItem(
             IsViewingAlbum() ? "移出当前相册" : "加入相册...",
             "\uEB9F",
@@ -179,17 +204,34 @@ public sealed partial class MainWindow : Window
         var shouldAdd = records.Any(record => !_collections.Favorites.Contains(record.FullPath));
         _collections.SetFavorite(records.Select(record => record.FullPath), shouldAdd);
         SettingsStore.Save(null, _settings);
-        ApplyFilterAndSort();
-        StatusText.Text = shouldAdd
-            ? $"已收藏 {records.Count:N0} 张图片"
-            : $"已取消收藏 {records.Count:N0} 张图片";
-        if (!shouldAdd && string.Equals(_activeNavigationFilter, "favorites", StringComparison.OrdinalIgnoreCase))
+        var isViewingFavorites = string.Equals(
+            _activeNavigationFilter,
+            "favorites",
+            StringComparison.OrdinalIgnoreCase);
+        if (isViewingFavorites)
         {
+            ApplyFilterAndSort();
             ClearCurrentSelection();
         }
         else
         {
+            UpdateVisibleFavoriteMarks(records);
             UpdateCollectionActionLabels();
+        }
+
+        StatusText.Text = shouldAdd
+            ? $"已收藏 {records.Count:N0} 张图片"
+            : $"已取消收藏 {records.Count:N0} 张图片";
+    }
+
+    private void UpdateVisibleFavoriteMarks(IReadOnlyCollection<ImageRecord> records)
+    {
+        var changedPaths = records
+            .Select(record => record.FullPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var tile in Images.Where(tile => changedPaths.Contains(tile.FullPath)))
+        {
+            tile.SetFavorite(_collections.Favorites.Contains(tile.FullPath));
         }
     }
 
@@ -295,7 +337,8 @@ public sealed partial class MainWindow : Window
         {
             PlaceholderText = "或输入新相册名称",
             Height = 36,
-            HorizontalAlignment = HorizontalAlignment.Stretch
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Style = Application.Current.Resources["SingleLineTextBoxStyle"] as Style
         };
         var content = new StackPanel { Spacing = 8, MinWidth = 340 };
         content.Children.Add(new TextBlock { Text = $"将 {records.Count:N0} 张图片加入相册" });
@@ -392,6 +435,7 @@ public sealed partial class MainWindow : Window
             var isSelected = button.Tag is string fitMode &&
                              string.Equals(fitMode, _settings.Appearance.WallpaperFit, StringComparison.OrdinalIgnoreCase);
             button.IsChecked = isSelected;
+            ApplyContentForeground(button, isSelected, pointerOver: false, RootGrid.ActualTheme);
             var label = button.Tag switch
             {
                 "fit" => "适中",

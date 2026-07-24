@@ -17,6 +17,8 @@ public sealed record ImageQueryOptions
 
     public ImageResolutionLevel Resolution { get; init; } = ImageResolutionLevel.All;
 
+    public ImageOrientation Orientation { get; init; } = ImageOrientation.All;
+
     public string FileExtension { get; init; } = "all";
 
     public string? Category { get; init; }
@@ -29,7 +31,8 @@ public sealed record ImageQueryOptions
 
     public IReadOnlyCollection<string> AlbumPaths { get; init; } = [];
 
-    public IReadOnlyDictionary<string, string> Categories { get; init; } = new Dictionary<string, string>();
+    public IReadOnlyDictionary<string, List<string>> Categories { get; init; } =
+        new Dictionary<string, List<string>>();
 
     public IReadOnlyDictionary<string, ImageDimensions> Dimensions { get; init; } = new Dictionary<string, ImageDimensions>();
 
@@ -56,6 +59,13 @@ public sealed class ImageLibraryQueryService
                 ImageResolutionFilter.Matches(dimensions.Width, dimensions.Height, options.Resolution));
         }
 
+        if (options.Orientation != ImageOrientation.All)
+        {
+            records = records.Where(record =>
+                options.Dimensions.TryGetValue(record.FullPath, out var dimensions) &&
+                ImageOrientationFilter.Matches(dimensions.Width, dimensions.Height, options.Orientation));
+        }
+
         if (!string.Equals(options.FileExtension, "all", StringComparison.OrdinalIgnoreCase))
         {
             records = records.Where(record => string.Equals(
@@ -67,8 +77,8 @@ public sealed class ImageLibraryQueryService
         if (!string.IsNullOrWhiteSpace(options.Category))
         {
             records = records.Where(record =>
-                options.Categories.TryGetValue(record.FullPath, out var category) &&
-                string.Equals(category, options.Category, StringComparison.OrdinalIgnoreCase));
+                options.Categories.TryGetValue(record.FullPath, out var categories) &&
+                categories.Contains(options.Category, StringComparer.OrdinalIgnoreCase));
         }
 
         records = ApplyCollectionFilter(records, options);
@@ -97,7 +107,8 @@ public sealed class ImageLibraryQueryService
         return options.Collection switch
         {
             ImageCollectionFilter.Favorites => records.Where(record => options.Favorites.Contains(record.FullPath)),
-            ImageCollectionFilter.Tagged => records.Where(record => options.Categories.ContainsKey(record.FullPath)),
+            ImageCollectionFilter.Tagged => records.Where(record =>
+                options.Categories.TryGetValue(record.FullPath, out var categories) && categories.Count > 0),
             ImageCollectionFilter.Album => FilterAlbum(records, options.AlbumPaths),
             ImageCollectionFilter.WallpaperFavorites => records.Where(record => options.WallpaperFavorites.Contains(record.FullPath)),
             _ => records

@@ -14,7 +14,7 @@ public sealed class AppSettings
 
     public Dictionary<string, List<string>> Albums { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
-    public Dictionary<string, string> Categories { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, List<string>> Categories { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public List<string> CustomCategories { get; set; } = [];
 }

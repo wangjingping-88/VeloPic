@@ -116,16 +116,15 @@ public sealed partial class MainWindow : Window
         AddToAlbumButton.IsEnabled = hasSelection && isImage;
         WallpaperFavoriteButton.IsEnabled = hasSelection && isImage;
         WallpaperButton.IsEnabled = hasSelection && isImage;
-        WallpaperQuickButton.IsEnabled = hasSelection && isImage;
         MoreActionButton.IsEnabled = hasSelection;
-        DetailTagButton.IsEnabled = hasSelection && isImage;
+        ManualClassificationButton.IsEnabled = hasSelection && isImage;
         WallpaperFillButton.IsEnabled = hasSelection && isImage;
         WallpaperFitButton.IsEnabled = hasSelection && isImage;
         WallpaperCenterButton.IsEnabled = hasSelection && isImage;
         WallpaperTileButton.IsEnabled = hasSelection && isImage;
         WallpaperStretchButton.IsEnabled = hasSelection && isImage;
         WallpaperDisplayBox.IsEnabled = hasSelection && isImage;
-        SmartClassificationButton.IsEnabled = _activeMediaKind == MediaKind.Image && _allImages.Count > 0;
+        UpdateSmartClassificationButtonState();
     }
 
     private async Task<string> ReadVideoResolutionAsync(string path)

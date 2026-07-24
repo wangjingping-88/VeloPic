@@ -16,6 +16,7 @@ public sealed partial class MainWindow : Window
     private readonly Dictionary<string, Button> _categoryButtons = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, TextBlock> _categoryCountTexts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Button> _albumButtons = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<Button> _selectedButtons = [];
     private SmartClassificationService? _smartClassificationService;
     private string? _activeCategory;
     private string? _activeNavigationFilter;
@@ -35,6 +36,11 @@ public sealed partial class MainWindow : Window
 
     private void RebuildCategoryControls()
     {
+        foreach (var button in _categoryButtons.Values)
+        {
+            UnregisterSelectionButton(button);
+        }
+
         CategoryListPanel.Children.Clear();
         _categoryButtons.Clear();
         _categoryCountTexts.Clear();
@@ -86,7 +92,10 @@ public sealed partial class MainWindow : Window
         {
             Text = "0",
             FontSize = 11,
-            Margin = new Thickness(0, 0, 8, 0),
+            MinWidth = 34,
+            Margin = new Thickness(8, 0, 4, 0),
+            TextAlignment = TextAlignment.Right,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
             VerticalAlignment = VerticalAlignment.Center,
             Style = Application.Current.Resources["SecondaryTextStyle"] as Style
         };
@@ -97,14 +106,10 @@ public sealed partial class MainWindow : Window
         var button = new Button
         {
             Tag = category,
-            Padding = new Thickness(0),
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            Background = new SolidColorBrush(Colors.Transparent),
-            BorderThickness = new Thickness(0),
-            CornerRadius = new CornerRadius(4),
+            Style = Application.Current.Resources["CategoryItemButtonStyle"] as Style,
             Content = grid
         };
+        RegisterSelectionButton(button);
         button.Click += CategoryButton_OnClick;
         return button;
     }
@@ -117,7 +122,8 @@ public sealed partial class MainWindow : Window
             MaxLength = 20,
             Height = 36,
             MinWidth = 320,
-            HorizontalAlignment = HorizontalAlignment.Stretch
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Style = Application.Current.Resources["SingleLineTextBoxStyle"] as Style
         };
         var content = new StackPanel { Spacing = 8 };
         content.Children.Add(nameBox);
@@ -167,8 +173,8 @@ public sealed partial class MainWindow : Window
     private int CountCategory(string category)
     {
         return _allImages.Count(x =>
-            _settings.Categories.TryGetValue(x.FullPath, out var savedCategory) &&
-            string.Equals(savedCategory, category, StringComparison.OrdinalIgnoreCase));
+            _settings.Categories.TryGetValue(x.FullPath, out var savedCategories) &&
+            savedCategories.Contains(category, StringComparer.OrdinalIgnoreCase));
     }
 
     private void AllPhotosCategoryButton_OnClick(object sender, RoutedEventArgs e)
@@ -216,7 +222,16 @@ public sealed partial class MainWindow : Window
 
         foreach (var record in selectedRecords)
         {
-            _settings.Categories[record.FullPath] = category;
+            if (!_settings.Categories.TryGetValue(record.FullPath, out var categories))
+            {
+                categories = [];
+                _settings.Categories[record.FullPath] = categories;
+            }
+
+            if (!categories.Contains(category, StringComparer.OrdinalIgnoreCase))
+            {
+                categories.Add(category);
+            }
         }
 
         SettingsStore.Save(null, _settings);
@@ -234,29 +249,68 @@ public sealed partial class MainWindow : Window
         UpdateSelectedCategoryChip(_selectedImage?.FullPath);
     }
 
-    private void DetailTagButton_OnClick(object sender, RoutedEventArgs e)
+    private void SelectedCategoryRemoveButton_OnClick(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement anchor &&
-            _selectedImage is not null &&
-            ManualClassificationButton.Flyout is FlyoutBase flyout)
+        if (sender is not Button { Tag: string removedCategory })
         {
-            flyout.ShowAt(anchor);
+            return;
+        }
+
+        RemoveCategoryFromSelectedRecords(removedCategory);
+    }
+
+    private void RemoveCategoryMenuItem_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuFlyoutItem { Tag: string removedCategory })
+        {
+            return;
+        }
+
+        RemoveCategoryFromSelectedRecords(removedCategory);
+    }
+
+    private void RemoveCategoryFromSelectedRecords(string removedCategory)
+    {
+        var selectedRecords = GetSelectedRecords();
+        var removedCount = _collections.RemoveCategory(
+            selectedRecords.Select(record => record.FullPath),
+            removedCategory);
+        if (removedCount == 0)
+        {
+            StatusText.Text = $"所选图片没有“{removedCategory}”标签";
+            return;
+        }
+
+        SettingsStore.Save(null, _settings);
+        UpdateCategoryCounts();
+        UpdateSelectedCategoryChip(_selectedImage?.FullPath);
+        StatusText.Text = $"已从 {removedCount:N0} 张图片移除“{removedCategory}”标签";
+        CategoryHintText.Text = $"已从 {removedCount:N0} 张图片移除“{removedCategory}”标签";
+
+        var removedFromCurrentView = string.Equals(
+            _activeCategory,
+            removedCategory,
+            StringComparison.OrdinalIgnoreCase);
+        if (removedFromCurrentView)
+        {
+            ApplyFilterAndSort();
+            ClearCurrentSelection();
         }
     }
 
     private void UpdateSelectedCategoryChip(string? imagePath)
     {
         if (!string.IsNullOrWhiteSpace(imagePath) &&
-            _settings.Categories.TryGetValue(imagePath, out var category) &&
-            !string.IsNullOrWhiteSpace(category))
+            _settings.Categories.TryGetValue(imagePath, out var categories) &&
+            categories.Count > 0)
         {
-            SelectedCategoryText.Text = category;
-            SelectedCategoryChip.Visibility = Visibility.Visible;
+            SelectedCategoriesItems.ItemsSource = categories.ToList();
+            SelectedCategoriesItems.Visibility = Visibility.Visible;
             return;
         }
 
-        SelectedCategoryText.Text = string.Empty;
-        SelectedCategoryChip.Visibility = Visibility.Collapsed;
+        SelectedCategoriesItems.ItemsSource = null;
+        SelectedCategoriesItems.Visibility = Visibility.Collapsed;
     }
 
     private async void SmartClassificationButton_OnClick(object sender, RoutedEventArgs e)
@@ -289,7 +343,7 @@ public sealed partial class MainWindow : Window
         }
 
         var unclassifiedTargets = targets
-            .Where(item => !_settings.Categories.ContainsKey(item.FullPath))
+            .Where(item => !_settings.Categories.TryGetValue(item.FullPath, out var categories) || categories.Count == 0)
             .DistinctBy(item => item.FullPath, StringComparer.OrdinalIgnoreCase)
             .ToList();
         var skippedCount = targets.Count - unclassifiedTargets.Count;
@@ -301,7 +355,7 @@ public sealed partial class MainWindow : Window
         }
 
         _isSmartClassifying = true;
-        SmartClassificationButton.IsEnabled = false;
+        UpdateSmartClassificationButtonState();
         var classified = new List<(ImageRecord Image, SmartClassificationResult Result)>();
 
         try
@@ -335,7 +389,7 @@ public sealed partial class MainWindow : Window
 
             foreach (var (image, result) in classified)
             {
-                _settings.Categories[image.FullPath] = result.Category;
+                _settings.Categories[image.FullPath] = [result.Category];
             }
 
             SettingsStore.Save(null, _settings);
@@ -364,19 +418,25 @@ public sealed partial class MainWindow : Window
             _isSmartClassifying = false;
             if (!_lifetimeCancellation.IsCancellationRequested)
             {
-                SmartClassificationButton.IsEnabled = true;
+                UpdateSmartClassificationButtonState();
             }
         }
     }
 
-    private void NavigationItem_OnTapped(object sender, TappedRoutedEventArgs e)
+    private void UpdateSmartClassificationButtonState()
+    {
+        SmartClassificationButton.IsEnabled = !_isSmartClassifying &&
+                                              _activeMediaKind == MediaKind.Image &&
+                                              _allImages.Count > 0;
+    }
+
+    private void NavigationItem_OnClick(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { Tag: string tag })
         {
             return;
         }
 
-        e.Handled = true;
         if (string.Equals(tag, "albums", StringComparison.OrdinalIgnoreCase))
         {
             SetAlbumNavigationExpanded(!_albumsExpanded);
@@ -412,13 +472,6 @@ public sealed partial class MainWindow : Window
                 ApplyFilterAndSort();
                 StatusText.Text = "正在查看最近图片";
                 break;
-            case "tags":
-                _activeCategory = null;
-                _activeNavigationFilter = "tags";
-                _activeAlbum = null;
-                ApplyFilterAndSort();
-                StatusText.Text = "正在查看已标记图片";
-                break;
             case "wallpaper":
                 _activeCategory = null;
                 _activeNavigationFilter = "wallpaper";
@@ -433,24 +486,24 @@ public sealed partial class MainWindow : Window
 
     private void SetNavigationSelection(string tag, ElementTheme? themeOverride = null)
     {
-        var selectedBrush = (themeOverride ?? RootGrid.ActualTheme) == ElementTheme.Dark
-            ? new SolidColorBrush(ColorHelper.FromArgb(255, 25, 63, 125))
-            : new SolidColorBrush(ColorHelper.FromArgb(255, 220, 234, 255));
-        var transparentBrush = new SolidColorBrush(Colors.Transparent);
-
-        FolderNavigationItem.Background = tag == "folder" ? selectedBrush : transparentBrush;
-        FavoritesNavigationItem.Background = tag == "favorites" ? selectedBrush : transparentBrush;
-        AlbumsNavigationItem.Background = tag == "albums" && string.IsNullOrWhiteSpace(_activeAlbum)
-            ? selectedBrush
-            : transparentBrush;
-        TagsNavigationItem.Background = tag == "tags" ? selectedBrush : transparentBrush;
-        RecentNavigationItem.Background = tag == "recent" ? selectedBrush : transparentBrush;
-        WallpaperNavigationItem.Background = tag == "wallpaper" ? selectedBrush : transparentBrush;
+        ApplyButtonSelection(FolderNavigationItem, tag == "folder", themeOverride);
+        ApplyButtonSelection(FavoritesNavigationItem, tag == "favorites", themeOverride);
+        ApplyButtonSelection(
+            AlbumsNavigationItem,
+            tag == "albums" && string.IsNullOrWhiteSpace(_activeAlbum),
+            themeOverride);
+        ApplyButtonSelection(RecentNavigationItem, tag == "recent", themeOverride);
+        ApplyButtonSelection(WallpaperNavigationItem, tag == "wallpaper", themeOverride);
         SetAlbumSelection(tag == "albums" ? _activeAlbum : null, themeOverride);
     }
 
     private void RebuildAlbumNavigation()
     {
+        foreach (var button in _albumButtons.Values)
+        {
+            UnregisterSelectionButton(button);
+        }
+
         AlbumListPanel.Children.Clear();
         _albumButtons.Clear();
 
@@ -485,7 +538,10 @@ public sealed partial class MainWindow : Window
             var count = new TextBlock
             {
                 Text = _settings.Albums[albumName].Count.ToString("N0"),
-                Margin = new Thickness(8, 0, 10, 0),
+                MinWidth = 34,
+                Margin = new Thickness(8, 0, 4, 0),
+                TextAlignment = TextAlignment.Right,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 VerticalAlignment = VerticalAlignment.Center,
                 Style = Application.Current.Resources["SecondaryTextStyle"] as Style
             };
@@ -496,15 +552,10 @@ public sealed partial class MainWindow : Window
             var button = new Button
             {
                 Tag = albumName,
-                Padding = new Thickness(6, 0, 6, 0),
-                MinHeight = 28,
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                HorizontalContentAlignment = HorizontalAlignment.Stretch,
-                Background = new SolidColorBrush(Colors.Transparent),
-                BorderThickness = new Thickness(0),
-                CornerRadius = new CornerRadius(4),
+                Style = Application.Current.Resources["CategoryItemButtonStyle"] as Style,
                 Content = content
             };
+            RegisterSelectionButton(button);
             button.Click += AlbumNavigationButton_OnClick;
             ToolTipService.SetToolTip(button, albumName);
             AutomationProperties.SetName(button, $"相册 {albumName}，{_settings.Albums[albumName].Count:N0} 张图片");
@@ -588,32 +639,223 @@ public sealed partial class MainWindow : Window
 
     private void SetAlbumSelection(string? albumName, ElementTheme? themeOverride = null)
     {
-        var selectedBrush = (themeOverride ?? RootGrid.ActualTheme) == ElementTheme.Dark
-            ? new SolidColorBrush(ColorHelper.FromArgb(255, 25, 63, 125))
-            : new SolidColorBrush(ColorHelper.FromArgb(255, 220, 234, 255));
-        var transparentBrush = new SolidColorBrush(Colors.Transparent);
-
         foreach (var (name, button) in _albumButtons)
         {
-            button.Background = string.Equals(name, albumName, StringComparison.OrdinalIgnoreCase)
-                ? selectedBrush
-                : transparentBrush;
+            ApplyButtonSelection(
+                button,
+                string.Equals(name, albumName, StringComparison.OrdinalIgnoreCase),
+                themeOverride);
         }
     }
 
     private void SetCategorySelection(string? category, bool showAll, ElementTheme? themeOverride = null)
     {
-        var selectedBrush = (themeOverride ?? RootGrid.ActualTheme) == ElementTheme.Dark
-            ? new SolidColorBrush(ColorHelper.FromArgb(255, 25, 63, 125))
-            : new SolidColorBrush(ColorHelper.FromArgb(255, 220, 234, 255));
-        var transparentBrush = new SolidColorBrush(Colors.Transparent);
-
-        AllPhotosCategoryButton.Background = showAll && string.IsNullOrWhiteSpace(category) ? selectedBrush : transparentBrush;
+        ApplyButtonSelection(
+            AllPhotosCategoryButton,
+            showAll && string.IsNullOrWhiteSpace(category),
+            themeOverride);
         foreach (var (categoryName, button) in _categoryButtons)
         {
-            button.Background = string.Equals(categoryName, category, StringComparison.OrdinalIgnoreCase)
-                ? selectedBrush
-                : transparentBrush;
+            ApplyButtonSelection(
+                button,
+                string.Equals(categoryName, category, StringComparison.OrdinalIgnoreCase),
+                themeOverride);
+        }
+    }
+
+    private void ApplyButtonSelection(Button button, bool selected, ElementTheme? themeOverride = null)
+    {
+        var actualTheme = themeOverride ?? RootGrid.ActualTheme;
+        if (selected)
+        {
+            _selectedButtons.Add(button);
+        }
+        else
+        {
+            _selectedButtons.Remove(button);
+        }
+
+        ApplyButtonVisualState(button, selected, pointerOver: false, actualTheme);
+    }
+
+    private void InitializeSelectionButtonInteractions()
+    {
+        foreach (var button in new[]
+                 {
+                     FolderNavigationItem,
+                     FavoritesNavigationItem,
+                     AlbumsNavigationItem,
+                     RecentNavigationItem,
+                     WallpaperNavigationItem,
+                     AllPhotosCategoryButton
+                 })
+        {
+            RegisterSelectionButton(button);
+        }
+    }
+
+    private void RegisterSelectionButton(Button button)
+    {
+        button.PointerEntered -= SelectionButton_OnPointerEntered;
+        button.PointerExited -= SelectionButton_OnPointerExited;
+        button.PointerEntered += SelectionButton_OnPointerEntered;
+        button.PointerExited += SelectionButton_OnPointerExited;
+    }
+
+    private void UnregisterSelectionButton(Button button)
+    {
+        button.PointerEntered -= SelectionButton_OnPointerEntered;
+        button.PointerExited -= SelectionButton_OnPointerExited;
+        _selectedButtons.Remove(button);
+    }
+
+    private void SelectionButton_OnPointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is Button button)
+        {
+            ApplyButtonVisualState(
+                button,
+                _selectedButtons.Contains(button),
+                pointerOver: true,
+                RootGrid.ActualTheme);
+        }
+    }
+
+    private void SelectionButton_OnPointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is Button button)
+        {
+            ApplyButtonVisualState(
+                button,
+                _selectedButtons.Contains(button),
+                pointerOver: false,
+                RootGrid.ActualTheme);
+        }
+    }
+
+    private static void ApplyButtonVisualState(
+        Button button,
+        bool selected,
+        bool pointerOver,
+        ElementTheme actualTheme)
+    {
+        if (selected)
+        {
+            button.Background = pointerOver
+                ? CreateSelectionHoverBackground(actualTheme)
+                : CreateSelectionBackground(actualTheme);
+        }
+        else if (pointerOver)
+        {
+            button.Background = CreatePointerOverBackground(actualTheme);
+        }
+        else
+        {
+            button.ClearValue(Control.BackgroundProperty);
+        }
+
+        ApplyContentForeground(button, selected, pointerOver, actualTheme);
+    }
+
+    private static SolidColorBrush CreateSelectionBackground(ElementTheme actualTheme)
+    {
+        return actualTheme == ElementTheme.Dark
+            ? new SolidColorBrush(ColorHelper.FromArgb(255, 54, 139, 255))
+            : new SolidColorBrush(ColorHelper.FromArgb(255, 36, 111, 229));
+    }
+
+    private static SolidColorBrush CreateSelectionHoverBackground(ElementTheme actualTheme)
+    {
+        return actualTheme == ElementTheme.Dark
+            ? new SolidColorBrush(ColorHelper.FromArgb(255, 60, 141, 255))
+            : new SolidColorBrush(ColorHelper.FromArgb(255, 21, 95, 204));
+    }
+
+    private static SolidColorBrush CreatePointerOverBackground(ElementTheme actualTheme)
+    {
+        return actualTheme == ElementTheme.Dark
+            ? new SolidColorBrush(ColorHelper.FromArgb(255, 48, 60, 79))
+            : new SolidColorBrush(ColorHelper.FromArgb(255, 220, 234, 255));
+    }
+
+    private static void ApplyContentForeground(
+        ContentControl control,
+        bool selected,
+        bool pointerOver,
+        ElementTheme actualTheme)
+    {
+        if (selected)
+        {
+            control.Foreground = new SolidColorBrush(Colors.White);
+        }
+        else if (pointerOver)
+        {
+            control.Foreground = CreatePointerOverForeground(actualTheme);
+        }
+        else
+        {
+            control.ClearValue(Control.ForegroundProperty);
+        }
+
+        if (control.Content is DependencyObject content)
+        {
+            ApplyDescendantTextForeground(content, selected, pointerOver, actualTheme);
+        }
+    }
+
+    private static SolidColorBrush CreatePointerOverForeground(ElementTheme actualTheme)
+    {
+        return actualTheme == ElementTheme.Dark
+            ? new SolidColorBrush(ColorHelper.FromArgb(255, 238, 243, 250))
+            : new SolidColorBrush(ColorHelper.FromArgb(255, 24, 34, 51));
+    }
+
+    private static void ApplyDescendantTextForeground(
+        DependencyObject element,
+        bool selected,
+        bool pointerOver,
+        ElementTheme actualTheme)
+    {
+        if (element is TextBlock textBlock)
+        {
+            if (selected)
+            {
+                textBlock.Foreground = textBlock.Tag as string == "SelectionCountBadge" &&
+                                       actualTheme != ElementTheme.Dark
+                    ? CreateSelectionBackground(actualTheme)
+                    : new SolidColorBrush(Colors.White);
+            }
+            else if (pointerOver)
+            {
+                textBlock.Foreground = CreatePointerOverForeground(actualTheme);
+            }
+            else
+            {
+                textBlock.ClearValue(TextBlock.ForegroundProperty);
+            }
+
+            return;
+        }
+
+        if (element is Panel panel)
+        {
+            foreach (var child in panel.Children)
+            {
+                ApplyDescendantTextForeground(child, selected, pointerOver, actualTheme);
+            }
+
+            return;
+        }
+
+        if (element is Border { Child: DependencyObject borderChild })
+        {
+            ApplyDescendantTextForeground(borderChild, selected, pointerOver, actualTheme);
+            return;
+        }
+
+        if (element is ContentControl { Content: DependencyObject nestedContent })
+        {
+            ApplyDescendantTextForeground(nestedContent, selected, pointerOver, actualTheme);
         }
     }
 
